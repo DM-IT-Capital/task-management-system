@@ -1,5 +1,3 @@
-#version1
-
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -97,37 +95,17 @@ export async function deleteUser(id: string) {
   }
 }
 
-<<<<<<< HEAD
-// Enhanced task functions with user visibility
-export async function getTasks(userId?: string, userRole?: string) {
-  try {
-    let query = supabase.from("tasks").select(`
-=======
 // Task functions with user details
 export async function getTasks() {
   try {
     const { data, error } = await supabase
       .from("tasks")
       .select(`
->>>>>>> upstream/main
         *,
         assigned_user:assigned_to(id, full_name, email, troop_rank),
         created_user:created_by(id, full_name, email, troop_rank)
       `)
-<<<<<<< HEAD
-
-    // Apply visibility rules
-    if (userId && userRole !== "admin") {
-      // Regular users can only see:
-      // 1. Tasks assigned to them
-      // 2. Tasks they created
-      query = query.or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
-    }
-
-    const { data, error } = await query.order("created_at", { ascending: false })
-=======
       .order("created_at", { ascending: false })
->>>>>>> upstream/main
 
     if (error) {
       console.error("Supabase error:", error)
@@ -187,48 +165,6 @@ export async function updateTask(id: string, updates: any) {
   }
 }
 
-<<<<<<< HEAD
-export async function updateTaskStatus(id: string, newStatus: string, userId: string, comment?: string) {
-  try {
-    // First get the current task to record the old status
-    const { data: currentTask, error: fetchError } = await supabase.from("tasks").select("status").eq("id", id).single()
-
-    if (fetchError) throw fetchError
-
-    // Update the task status
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select(`
-        *,
-        assigned_user:assigned_to(id, full_name, email, troop_rank),
-        created_user:created_by(id, full_name, email, troop_rank)
-      `)
-      .single()
-
-    if (error) throw error
-
-    // Record the status update
-    await supabase.from("task_status_updates").insert([
-      {
-        task_id: id,
-        user_id: userId,
-        old_status: currentTask.status,
-        new_status: newStatus,
-        comment: comment,
-      },
-    ])
-
-    return data
-  } catch (error) {
-    console.error("Error in updateTaskStatus:", error)
-    throw error
-  }
-}
-
-=======
->>>>>>> upstream/main
 export async function deleteTask(id: string) {
   try {
     const { error } = await supabase.from("tasks").delete().eq("id", id)
@@ -243,29 +179,6 @@ export async function deleteTask(id: string) {
   }
 }
 
-<<<<<<< HEAD
-// Get task status history
-export async function getTaskStatusHistory(taskId: string) {
-  try {
-    const { data, error } = await supabase
-      .from("task_status_updates")
-      .select(`
-        *,
-        user:user_id(full_name, troop_rank)
-      `)
-      .eq("task_id", taskId)
-      .order("created_at", { ascending: false })
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    console.error("Error getting task status history:", error)
-    return []
-  }
-}
-
-=======
->>>>>>> upstream/main
 // Rank functions
 export async function getRanks() {
   try {
