@@ -1,3 +1,4 @@
+#version1
 {
   "$schema": "https://ui.shadcn.com/schema.json",
   "style": "default",
@@ -18,4 +19,8 @@
     "hooks": "@/hooks"
   },
   "iconLibrary": "lucide"
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> upstream/main

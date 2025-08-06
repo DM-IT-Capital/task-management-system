@@ -1,5 +1,5 @@
 "use client"
-
+#version1
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -10,11 +10,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+<<<<<<< HEAD
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Mail, Calendar, AlertTriangle } from "lucide-react"
 import type { User } from "@/lib/auth"
 import { getUsers } from "@/lib/supabase"
 import { sendAssignmentNotification } from "@/lib/notifications"
+=======
+import { Mail } from "lucide-react"
+import type { User } from "@/lib/auth"
+import { getUsers } from "@/lib/supabase"
+import { sendTaskAssignmentEmail } from "@/lib/email"
+>>>>>>> upstream/main
 
 interface TaskFormProps {
   user: User
@@ -34,7 +41,10 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
   const [users, setUsers] = useState<UserOption[]>([])
   const [selectedUser, setSelectedUser] = useState<string>("")
   const [sendEmail, setSendEmail] = useState(true)
+<<<<<<< HEAD
   const [dueDate, setDueDate] = useState("")
+=======
+>>>>>>> upstream/main
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -46,12 +56,15 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
       }
     }
     loadUsers()
+<<<<<<< HEAD
 
     // Set minimum due date to tomorrow
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const minDate = tomorrow.toISOString().split("T")[0]
     setDueDate(minDate)
+=======
+>>>>>>> upstream/main
   }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -60,6 +73,7 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
 
     const formData = new FormData(e.currentTarget)
     const assignedTo = formData.get("assignedTo") as string
+<<<<<<< HEAD
     const dueDateValue = formData.get("dueDate") as string
 
     // Validate due date
@@ -77,21 +91,30 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
       setLoading(false)
       return
     }
+=======
+>>>>>>> upstream/main
 
     const newTask = {
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       status: "pending",
       priority: formData.get("priority") as string,
+<<<<<<< HEAD
       assigned_to: assignedTo && assignedTo !== "unassigned" ? assignedTo : null,
       created_by: user.id,
       due_date: dueDateValue,
+=======
+      assigned_to: assignedTo || null,
+      created_by: user.id,
+      due_date: formData.get("dueDate") as string,
+>>>>>>> upstream/main
     }
 
     try {
       const createdTask = await onTaskCreated(newTask)
 
       // Send email notification if a user is assigned and email is enabled
+<<<<<<< HEAD
       if (assignedTo && assignedTo !== "unassigned" && sendEmail) {
         try {
           await sendAssignmentNotification(createdTask.id, assignedTo, user.id)
@@ -106,12 +129,32 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
     } catch (error) {
       console.error("Error in task creation:", error)
       alert("Error creating task. Please try again.")
+=======
+      if (assignedTo && sendEmail) {
+        const assignedUser = users.find((u) => u.id === assignedTo)
+        if (assignedUser && assignedUser.email) {
+          await sendTaskAssignmentEmail(
+            assignedUser,
+            {
+              title: newTask.title,
+              description: newTask.description,
+              priority: newTask.priority,
+              due_date: newTask.due_date,
+            },
+            { full_name: user.full_name },
+          )
+        }
+      }
+    } catch (error) {
+      console.error("Error in task creation:", error)
+>>>>>>> upstream/main
     }
 
     setLoading(false)
   }
 
   const selectedUserData = users.find((u) => u.id === selectedUser)
+<<<<<<< HEAD
   const isAssigned = selectedUser && selectedUser !== "unassigned"
 
   // Calculate days until due date
@@ -123,6 +166,8 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
   }
 
   const daysUntilDue = getDaysUntilDue()
+=======
+>>>>>>> upstream/main
 
   return (
     <Card>
@@ -186,6 +231,7 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
             </div>
 
             <div className="space-y-2">
+<<<<<<< HEAD
               <Label htmlFor="dueDate">Due Date {isAssigned && <span className="text-red-500">*</span>}</Label>
               <Input
                 id="dueDate"
@@ -241,6 +287,26 @@ export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
                 </AlertDescription>
               </Alert>
             </>
+=======
+              <Label htmlFor="dueDate">Due Date</Label>
+              <Input id="dueDate" name="dueDate" type="date" required />
+            </div>
+          </div>
+
+          {selectedUser && (
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="sendEmail"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                className="rounded"
+              />
+              <Label htmlFor="sendEmail" className="text-sm">
+                Send email notification to assigned user
+              </Label>
+            </div>
+>>>>>>> upstream/main
           )}
 
           <div className="flex justify-end space-x-2">

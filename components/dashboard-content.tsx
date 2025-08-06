@@ -1,7 +1,8 @@
 "use client"
-
+#version1
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+<<<<<<< HEAD
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -9,11 +10,21 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Plus, LogOut, Users, CheckSquare, Award, Eye } from "lucide-react"
 import { TaskForm } from "@/components/task-form"
 import { TaskCard } from "@/components/task-card"
+=======
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Plus, LogOut, Users, CheckSquare, Trash2, Award, User, Mail } from "lucide-react"
+import { TaskForm } from "@/components/task-form"
+>>>>>>> upstream/main
 import { UserManagement } from "@/components/user-management"
 import { RankManagement } from "@/components/rank-management"
 import { logoutAction } from "@/app/actions/auth"
 import { getTasks, createTask, deleteTask } from "@/lib/supabase"
+<<<<<<< HEAD
 import { checkDueDateReminders } from "@/lib/notifications"
+=======
+>>>>>>> upstream/main
 import type { User as AuthUser } from "@/lib/auth"
 
 interface Task {
@@ -48,8 +59,12 @@ export function DashboardContent({ user }: { user: AuthUser }) {
   useEffect(() => {
     const loadTasks = async () => {
       try {
+<<<<<<< HEAD
         // Pass user info to getTasks for visibility filtering
         const tasksData = await getTasks(user.id, user.role)
+=======
+        const tasksData = await getTasks()
+>>>>>>> upstream/main
         setTasks(tasksData || [])
       } catch (error) {
         console.error("Error loading tasks:", error)
@@ -59,12 +74,16 @@ export function DashboardContent({ user }: { user: AuthUser }) {
     }
 
     loadTasks()
+<<<<<<< HEAD
 
     // Check for due date reminders (only for admins to avoid multiple checks)
     if (user.permissions.can_manage_users) {
       checkDueDateReminders().catch(console.error)
     }
   }, [user.id, user.role, user.permissions.can_manage_users])
+=======
+  }, [user.id])
+>>>>>>> upstream/main
 
   const handleDeleteTask = async (taskId: string) => {
     if (!user.permissions.can_delete_tasks) {
@@ -72,6 +91,7 @@ export function DashboardContent({ user }: { user: AuthUser }) {
       return
     }
 
+<<<<<<< HEAD
     if (confirm("Are you sure you want to delete this task?")) {
       try {
         await deleteTask(taskId)
@@ -102,6 +122,42 @@ export function DashboardContent({ user }: { user: AuthUser }) {
     inProgress: tasks.filter((t) => t.status === "in-progress").length,
     completed: tasks.filter((t) => t.status === "completed").length,
     overdue: tasks.filter((t) => new Date(t.due_date) < new Date() && t.status !== "completed").length,
+=======
+    try {
+      await deleteTask(taskId)
+      const updatedTasks = tasks.filter((task) => task.id !== taskId)
+      setTasks(updatedTasks)
+    } catch (error) {
+      console.error("Error deleting task:", error)
+      alert("Error deleting task. Please try again.")
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "high":
+        return "destructive"
+      case "medium":
+        return "default"
+      case "low":
+        return "secondary"
+      default:
+        return "default"
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "default"
+      case "in-progress":
+        return "secondary"
+      case "pending":
+        return "outline"
+      default:
+        return "outline"
+    }
+>>>>>>> upstream/main
   }
 
   return (
@@ -148,6 +204,7 @@ export function DashboardContent({ user }: { user: AuthUser }) {
           </TabsList>
 
           <TabsContent value="tasks" className="space-y-6">
+<<<<<<< HEAD
             {/* Task Statistics */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
               <Card>
@@ -206,6 +263,8 @@ export function DashboardContent({ user }: { user: AuthUser }) {
               </AlertDescription>
             </Alert>
 
+=======
+>>>>>>> upstream/main
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Tasks</h2>
               {user.permissions.can_create_tasks && (
@@ -236,6 +295,7 @@ export function DashboardContent({ user }: { user: AuthUser }) {
               />
             )}
 
+<<<<<<< HEAD
             {/* Task Sections */}
             <div className="space-y-6">
               {/* My Tasks Section */}
@@ -302,12 +362,16 @@ export function DashboardContent({ user }: { user: AuthUser }) {
               )}
 
               {/* No Tasks Message */}
+=======
+            <div className="grid gap-4">
+>>>>>>> upstream/main
               {loading ? (
                 <div className="text-center py-8">Loading tasks...</div>
               ) : tasks.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-8">
                     <p className="text-gray-500">No tasks found</p>
+<<<<<<< HEAD
                     {!user.permissions.can_manage_users && (
                       <p className="text-sm text-gray-400 mt-2">
                         You can only see tasks assigned to you or tasks you created
@@ -316,6 +380,69 @@ export function DashboardContent({ user }: { user: AuthUser }) {
                   </CardContent>
                 </Card>
               ) : null}
+=======
+                  </CardContent>
+                </Card>
+              ) : (
+                tasks.map((task) => (
+                  <Card key={task.id}>
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg">{task.title}</CardTitle>
+                          <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+
+                          {/* Assignment and Creation Info */}
+                          <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <User className="w-4 h-4" />
+                              <span>
+                                Assigned to:{" "}
+                                {task.assigned_user ? (
+                                  <span className="font-medium text-gray-700">
+                                    {task.assigned_user.full_name} ({task.assigned_user.troop_rank})
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">Unassigned</span>
+                                )}
+                              </span>
+                            </div>
+
+                            {task.assigned_user?.email && (
+                              <div className="flex items-center gap-1">
+                                <Mail className="w-4 h-4" />
+                                <span>{task.assigned_user.email}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-gray-400 mt-2">
+                            Created by: {task.created_user?.full_name || "Unknown"} on{" "}
+                            {new Date(task.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 ml-4">
+                          <Badge variant={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                          <Badge variant={getStatusColor(task.status)}>{task.status}</Badge>
+                          {user.permissions.can_delete_tasks && (
+                            <Button variant="outline" size="sm" onClick={() => handleDeleteTask(task.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex justify-between text-sm text-gray-500">
+                        <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>
+                        <span>Status: {task.status}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+>>>>>>> upstream/main
             </div>
           </TabsContent>
 

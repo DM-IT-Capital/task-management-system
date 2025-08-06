@@ -1,3 +1,5 @@
+#version1
+
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -95,14 +97,24 @@ export async function deleteUser(id: string) {
   }
 }
 
+<<<<<<< HEAD
 // Enhanced task functions with user visibility
 export async function getTasks(userId?: string, userRole?: string) {
   try {
     let query = supabase.from("tasks").select(`
+=======
+// Task functions with user details
+export async function getTasks() {
+  try {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select(`
+>>>>>>> upstream/main
         *,
         assigned_user:assigned_to(id, full_name, email, troop_rank),
         created_user:created_by(id, full_name, email, troop_rank)
       `)
+<<<<<<< HEAD
 
     // Apply visibility rules
     if (userId && userRole !== "admin") {
@@ -113,6 +125,9 @@ export async function getTasks(userId?: string, userRole?: string) {
     }
 
     const { data, error } = await query.order("created_at", { ascending: false })
+=======
+      .order("created_at", { ascending: false })
+>>>>>>> upstream/main
 
     if (error) {
       console.error("Supabase error:", error)
@@ -172,6 +187,7 @@ export async function updateTask(id: string, updates: any) {
   }
 }
 
+<<<<<<< HEAD
 export async function updateTaskStatus(id: string, newStatus: string, userId: string, comment?: string) {
   try {
     // First get the current task to record the old status
@@ -211,6 +227,8 @@ export async function updateTaskStatus(id: string, newStatus: string, userId: st
   }
 }
 
+=======
+>>>>>>> upstream/main
 export async function deleteTask(id: string) {
   try {
     const { error } = await supabase.from("tasks").delete().eq("id", id)
@@ -225,6 +243,7 @@ export async function deleteTask(id: string) {
   }
 }
 
+<<<<<<< HEAD
 // Get task status history
 export async function getTaskStatusHistory(taskId: string) {
   try {
@@ -245,6 +264,8 @@ export async function getTaskStatusHistory(taskId: string) {
   }
 }
 
+=======
+>>>>>>> upstream/main
 // Rank functions
 export async function getRanks() {
   try {
