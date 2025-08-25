@@ -4,14 +4,13 @@ import { redirect } from "next/navigation"
 export interface User {
   id: string
   username: string
+  email: string
   full_name: string
   troop_rank: string
   role: string
-  permissions: {
-    can_create_tasks: boolean
-    can_delete_tasks: boolean
-    can_manage_users: boolean
-  }
+  can_create_tasks: boolean
+  can_delete_tasks: boolean
+  can_manage_users: boolean
 }
 
 export async function getUser(): Promise<User | null> {
@@ -41,7 +40,7 @@ export async function requireAuth(): Promise<User> {
 
 export async function requireAdmin(): Promise<User> {
   const user = await requireAuth()
-  if (!user.permissions.can_manage_users) {
+  if (!user.can_manage_users) {
     redirect("/dashboard")
   }
   return user

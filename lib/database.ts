@@ -1,76 +1,138 @@
-// Mock database functions - replace with your actual database implementation
-let users: any[] = [
-  {
-    id: "1",
-    username: "admin",
-    password_hash: "$2b$10$rOzJqQqQqQqQqQqQqQqQqOzJqQqQqQqQqQqQqQqQqOzJqQqQqQqQq",
-    full_name: "System Administrator",
-    troop_rank: "Colonel",
-    role: "admin",
-    permissions: {
-      can_create_tasks: true,
-      can_delete_tasks: true,
-      can_manage_users: true,
-    },
-  },
-]
+import { supabase } from "./supabase"
 
-let tasks: any[] = []
-
-export async function findUserByUsername(username: string) {
-  return users.find((user) => user.username === username)
+export interface Task {
+  id: string
+  title: string
+  description: string
+  status: "pending" | "in_progress" | "completed" | "assigned"
+  priority: "low" | "medium" | "high"
+  assigned_to: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  due_date: string | null
 }
 
-export async function createUser(userData: any) {
-  const newUser = {
-    id: Date.now().toString(),
-    ...userData,
-    created_at: new Date().toISOString(),
+export interface User {
+  id: string
+  username: string
+  email: string
+  full_name: string
+  troop_rank: string
+  role: string
+  can_create_tasks: boolean
+  can_delete_tasks: boolean
+  can_manage_users: boolean
+  created_at: string
+}
+
+export async function getTasks(): Promise<Task[]> {
+  const { data, error } = await supabase.from("tasks").select("*").order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching tasks:", error)
+    return []
   }
-  users.push(newUser)
-  return newUser
+
+  return data || []
 }
 
-export async function getAllUsers() {
-  return users
-}
+export async function createTask(task: Omit<Task, "id" | "created_at" | "updated_at">): Promise<Task | null> {
+  const { data, error } = await supabase.from("tasks").insert([task]).select().single()
 
-export async function updateUser(id: string, updates: any) {
-  const index = users.findIndex((user) => user.id === id)
-  if (index !== -1) {
-    users[index] = { ...users[index], ...updates }
-    return users[index]
+  if (error) {
+    console.error("Error creating task:", error)
+    return null
   }
-  return null
+
+  return data
 }
 
-export async function deleteUser(id: string) {
-  users = users.filter((user) => user.id !== id)
-}
+export async function updateTask(id: string, updates: Partial<Task>): Promise<Task | null> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single()
 
-export async function createTask(taskData: any) {
-  const newTask = {
-    id: Date.now().toString(),
-    ...taskData,
-    created_at: new Date().toISOString(),
+  if (error) {
+    console.error("Error updating task:", error)
+    return null
   }
-  tasks.push(newTask)
-  return newTask
+
+  return data
 }
 
-export async function getAllTasks() {
-  return tasks
-}
+export async function deleteTask(id: string): Promise<boolean> {
+  const { error } = await supabase.from("tasks").delete().eq("id", id)
 
-export async function updateTask(id: string, updates: any) {
-  const index = tasks.findIndex((task) => task.id === id)
-  if (index !== -1) {
-    tasks[index] = { ...tasks[index], ...updates }
-    return tasks[index]
+  if (error) {
+    console.error("Error deleting task:", error)
+    return false
   }
-  return null
+
+  return true
 }
 
-export async function deleteTask(id: string) {
-  tasks = tasks.filter((task) => task.id !== id)
+export async function getUsers(): Promise<User[]> {
+  const { data, error } = await supabase
+    .from("users")
+    .select(
+      "id, username, email, full_name, troop_rank, role, can_create_tasks, can_delete_tasks, can_manage_users, created_at",
+    )
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching users:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export async function createUser(user: Omit<User, "id" | "created_at"> & { password: string }): Promise<User | null> {
+  const { data, error } = await supabase
+    .from("users")
+    .insert([user])
+    .select(
+      "id, username, email, full_name, troop_rank, role, can_create_tasks, can_delete_tasks, can_manage_users, created_at",
+    )
+    .single()
+
+  if (error) {
+    console.error("Error creating user:", error)
+    return null
+  }
+
+  return data
+}
+
+export async function updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+  const { data, error } = await supabase
+    .from("users")
+    .update(updates)
+    .eq("id", id)
+    .select(
+      "id, username, email, full_name, troop_rank, role, can_create_tasks, can_delete_tasks, can_manage_users, created_at",
+    )
+    .single()
+
+  if (error) {
+    console.error("Error updating user:", error)
+    return null
+  }
+
+  return data
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const { error } = await supabase.from("users").delete().eq("id", id)
+
+  if (error) {
+    console.error("Error deleting user:", error)
+    return false
+  }
+
+  return true
 }

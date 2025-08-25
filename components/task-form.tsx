@@ -1,5 +1,5 @@
 "use client"
-#version1
+
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -8,317 +8,193 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-<<<<<<< HEAD
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Mail, Calendar, AlertTriangle } from "lucide-react"
-import type { User } from "@/lib/auth"
-import { getUsers } from "@/lib/supabase"
-import { sendAssignmentNotification } from "@/lib/notifications"
-=======
-import { Mail } from "lucide-react"
-import type { User } from "@/lib/auth"
-import { getUsers } from "@/lib/supabase"
-import { sendTaskAssignmentEmail } from "@/lib/email"
->>>>>>> upstream/main
+import { createTask, updateTask } from "@/lib/supabase"
+import { toast } from "sonner"
 
-interface TaskFormProps {
-  user: User
-  onClose: () => void
-  onTaskCreated: (task: any) => void
-}
-
-interface UserOption {
+interface User {
   id: string
+  username: string
   full_name: string
-  email: string
   troop_rank: string
 }
 
-export function TaskForm({ user, onClose, onTaskCreated }: TaskFormProps) {
+interface Task {
+  id: string
+  title: string
+  description: string
+  priority: "low" | "medium" | "high"
+  status: "pending" | "assigned" | "in_progress" | "on_hold" | "completed"
+  due_date: string | null
+  assigned_to: string | null
+}
+
+interface TaskFormProps {
+  users: User[]
+  onTaskCreated: () => void
+  onTaskUpdated?: () => void
+  currentUser: User
+  editingTask?: Task | null
+}
+
+export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, editingTask }: TaskFormProps) {
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    priority: "medium",
+    status: "pending",
+    due_date: "",
+    assigned_to: "",
+  })
   const [loading, setLoading] = useState(false)
-  const [users, setUsers] = useState<UserOption[]>([])
-  const [selectedUser, setSelectedUser] = useState<string>("")
-  const [sendEmail, setSendEmail] = useState(true)
-<<<<<<< HEAD
-  const [dueDate, setDueDate] = useState("")
-=======
->>>>>>> upstream/main
 
   useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const usersData = await getUsers()
-        setUsers(usersData || [])
-      } catch (error) {
-        console.error("Error loading users:", error)
-      }
+    if (editingTask) {
+      setFormData({
+        title: editingTask.title,
+        description: editingTask.description,
+        priority: editingTask.priority,
+        status: editingTask.status,
+        due_date: editingTask.due_date ? editingTask.due_date.split("T")[0] : "",
+        assigned_to: editingTask.assigned_to || "",
+      })
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        priority: "medium",
+        status: "pending",
+        due_date: "",
+        assigned_to: "",
+      })
     }
-    loadUsers()
-<<<<<<< HEAD
+  }, [editingTask])
 
-    // Set minimum due date to tomorrow
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const minDate = tomorrow.toISOString().split("T")[0]
-    setDueDate(minDate)
-=======
->>>>>>> upstream/main
-  }, [])
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const formData = new FormData(e.currentTarget)
-    const assignedTo = formData.get("assignedTo") as string
-<<<<<<< HEAD
-    const dueDateValue = formData.get("dueDate") as string
-
-    // Validate due date
-    const selectedDueDate = new Date(dueDateValue)
-    const now = new Date()
-    if (selectedDueDate <= now) {
-      alert("Due date must be in the future")
-      setLoading(false)
-      return
-    }
-
-    // If assigning to someone, due date is required
-    if (assignedTo && assignedTo !== "unassigned" && !dueDateValue) {
-      alert("Due date is required when assigning a task to someone")
-      setLoading(false)
-      return
-    }
-=======
->>>>>>> upstream/main
-
-    const newTask = {
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      status: "pending",
-      priority: formData.get("priority") as string,
-<<<<<<< HEAD
-      assigned_to: assignedTo && assignedTo !== "unassigned" ? assignedTo : null,
-      created_by: user.id,
-      due_date: dueDateValue,
-=======
-      assigned_to: assignedTo || null,
-      created_by: user.id,
-      due_date: formData.get("dueDate") as string,
->>>>>>> upstream/main
-    }
-
     try {
-      const createdTask = await onTaskCreated(newTask)
-
-      // Send email notification if a user is assigned and email is enabled
-<<<<<<< HEAD
-      if (assignedTo && assignedTo !== "unassigned" && sendEmail) {
-        try {
-          await sendAssignmentNotification(createdTask.id, assignedTo, user.id)
-        } catch (emailError) {
-          console.error("Error sending notification:", emailError)
-          // Don't fail the task creation if email fails
-          alert("Task created successfully, but email notification failed to send.")
-        }
+      const taskData = {
+        title: formData.title,
+        description: formData.description,
+        priority: formData.priority,
+        status: formData.status,
+        due_date: formData.due_date || null,
+        assigned_to: formData.assigned_to || undefined,
       }
 
-      onClose()
-    } catch (error) {
-      console.error("Error in task creation:", error)
-      alert("Error creating task. Please try again.")
-=======
-      if (assignedTo && sendEmail) {
-        const assignedUser = users.find((u) => u.id === assignedTo)
-        if (assignedUser && assignedUser.email) {
-          await sendTaskAssignmentEmail(
-            assignedUser,
-            {
-              title: newTask.title,
-              description: newTask.description,
-              priority: newTask.priority,
-              due_date: newTask.due_date,
-            },
-            { full_name: user.full_name },
-          )
-        }
+      if (editingTask) {
+        await updateTask(editingTask.id, taskData)
+        toast.success("Task updated successfully!")
+        onTaskUpdated?.()
+      } else {
+        await createTask({
+          ...taskData,
+          created_by: currentUser.id,
+        })
+        toast.success("Task created successfully!")
+        onTaskCreated()
       }
     } catch (error) {
-      console.error("Error in task creation:", error)
->>>>>>> upstream/main
+      console.error("Error saving task:", error)
+      toast.error(`Failed to ${editingTask ? "update" : "create"} task`)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
-
-  const selectedUserData = users.find((u) => u.id === selectedUser)
-<<<<<<< HEAD
-  const isAssigned = selectedUser && selectedUser !== "unassigned"
-
-  // Calculate days until due date
-  const getDaysUntilDue = () => {
-    if (!dueDate) return 0
-    const due = new Date(dueDate)
-    const now = new Date()
-    return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  }
-
-  const daysUntilDue = getDaysUntilDue()
-=======
->>>>>>> upstream/main
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create New Task</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Task Title</Label>
-            <Input id="title" name="title" placeholder="Enter task title" required />
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="title">Task Title *</Label>
+        <Input
+          id="title"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          placeholder="Enter task title"
+          required
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" name="description" placeholder="Enter task description" rows={3} />
-          </div>
+      <div className="space-y-2">
+        <Label htmlFor="description">Description *</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          placeholder="Enter task description"
+          rows={3}
+          required
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="assignedTo">Assign To</Label>
-            <Select name="assignedTo" value={selectedUser} onValueChange={setSelectedUser}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select user (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {users.map((userOption) => (
-                  <SelectItem key={userOption.id} value={userOption.id}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>{userOption.full_name}</span>
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {userOption.troop_rank}
-                      </Badge>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="priority">Priority</Label>
+          <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value })}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-            {selectedUserData && (
-              <div className="flex items-center space-x-2 text-sm text-gray-600 bg-blue-50 p-2 rounded">
-                <Mail className="w-4 h-4" />
-                <span>Will notify: {selectedUserData.email}</span>
-              </div>
-            )}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="status">Status</Label>
+          <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="on_hold">On Hold</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select name="priority" defaultValue="medium">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="space-y-2">
+        <Label htmlFor="due_date">Due Date</Label>
+        <Input
+          id="due_date"
+          type="date"
+          value={formData.due_date}
+          onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+        />
+      </div>
 
-            <div className="space-y-2">
-<<<<<<< HEAD
-              <Label htmlFor="dueDate">Due Date {isAssigned && <span className="text-red-500">*</span>}</Label>
-              <Input
-                id="dueDate"
-                name="dueDate"
-                type="datetime-local"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-                required={isAssigned}
-              />
-            </div>
-          </div>
+      <div className="space-y-2">
+        <Label htmlFor="assigned_to">Assign To</Label>
+        <Select
+          value={formData.assigned_to}
+          onValueChange={(value) => setFormData({ ...formData, assigned_to: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select user (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {users.map((user) => (
+              <SelectItem key={user.id} value={user.id}>
+                {user.full_name} ({user.troop_rank})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-          {dueDate && (
-            <Alert>
-              <Calendar className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Due in {daysUntilDue} days</strong>
-                {isAssigned && (
-                  <div className="mt-2 text-sm">
-                    <strong>📅 Reminder Schedule:</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-1">
-                      <li>3 days before: First reminder email</li>
-                      <li>1 day before: Urgent reminder email</li>
-                      <li>On due date: Final warning email</li>
-                    </ul>
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {isAssigned && (
-            <>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="sendEmail"
-                  checked={sendEmail}
-                  onChange={(e) => setSendEmail(e.target.checked)}
-                  className="rounded"
-                />
-                <Label htmlFor="sendEmail" className="text-sm">
-                  Send email notification to assigned user
-                </Label>
-              </div>
-
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Task Visibility:</strong> Only the assigned user and admins will be able to see this task. The
-                  assigned user will receive automatic reminders based on the due date.
-                </AlertDescription>
-              </Alert>
-            </>
-=======
-              <Label htmlFor="dueDate">Due Date</Label>
-              <Input id="dueDate" name="dueDate" type="date" required />
-            </div>
-          </div>
-
-          {selectedUser && (
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="sendEmail"
-                checked={sendEmail}
-                onChange={(e) => setSendEmail(e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="sendEmail" className="text-sm">
-                Send email notification to assigned user
-              </Label>
-            </div>
->>>>>>> upstream/main
-          )}
-
-          <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create Task"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      <div className="flex justify-end gap-2">
+        <Button type="submit" disabled={loading}>
+          {loading ? "Saving..." : editingTask ? "Update Task" : "Create Task"}
+        </Button>
+      </div>
+    </form>
   )
 }

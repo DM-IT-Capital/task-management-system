@@ -1,92 +1,85 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, CheckCircle, XCircle } from "lucide-react"
 
-export default function LoginVerifyPage() {
+export default function VerifyLoginPage() {
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
+  const [message, setMessage] = useState("")
   const router = useRouter()
 
   useEffect(() => {
-    const handleLogin = async () => {
+    const verifyLogin = async () => {
       try {
-        // Get users from localStorage
-        const savedUsers = localStorage.getItem("users")
-        let users = []
+        // Get login attempt from cookie
+        const response = await fetch("/api/auth/verify", {
+          method: "POST",
+          credentials: "include",
+        })
 
-        if (savedUsers) {
-          users = JSON.parse(savedUsers)
+        const data = await response.json()
+
+        if (data.success) {
+          setStatus("success")
+          setMessage("Login successful! Redirecting to dashboard...")
+
+          // Store user data in localStorage
+          localStorage.setItem("user", JSON.stringify(data.user))
+
+          // Redirect after a short delay
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 1500)
         } else {
-          // Default users
-          users = [
-            {
-              id: "1",
-              username: "admin",
-              password: "admin123", // This will be the current password
-              full_name: "System Administrator",
-              troop_rank: "Colonel",
-              role: "admin",
-              permissions: {
-                can_create_tasks: true,
-                can_delete_tasks: true,
-                can_manage_users: true,
-              },
-            },
-          ]
-          localStorage.setItem("users", JSON.stringify(users))
+          setStatus("error")
+          setMessage(data.error || "Login failed")
         }
-
-        // Get login attempt from URL params or session
-        const urlParams = new URLSearchParams(window.location.search)
-        const username = urlParams.get("username") || "admin"
-        const password = urlParams.get("password") || ""
-
-        if (!username || !password) {
-          router.push("/login?error=missing-credentials")
-          return
-        }
-
-        // Find user
-        const user = users.find((u: any) => u.username === username)
-
-        if (!user) {
-          router.push("/login?error=invalid-credentials")
-          return
-        }
-
-        // Check password - use the stored password from localStorage
-        const isValidPassword = password === user.password
-
-        if (!isValidPassword) {
-          router.push("/login?error=invalid-credentials")
-          return
-        }
-
-        // Set user session
-        document.cookie = `user=${JSON.stringify({
-          id: user.id,
-          username: user.username,
-          full_name: user.full_name,
-          troop_rank: user.troop_rank,
-          role: user.role,
-          permissions: user.permissions,
-        })}; path=/; max-age=${60 * 60 * 24 * 7}`
-
-        router.push("/dashboard")
       } catch (error) {
-        console.error("Login error:", error)
-        router.push("/login?error=system-error")
+        console.error("Verification error:", error)
+        setStatus("error")
+        setMessage("An error occurred during verification")
       }
     }
 
-    handleLogin()
+    verifyLogin()
   }, [router])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-        <p className="mt-2 text-gray-600">Verifying credentials...</p>
-      </div>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2">
+            {status === "loading" && <Loader2 className="h-5 w-5 animate-spin" />}
+            {status === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
+            {status === "error" && <XCircle className="h-5 w-5 text-red-600" />}
+            Verifying Login
+          </CardTitle>
+          <CardDescription>
+            {status === "loading" && "Please wait while we verify your credentials..."}
+            {status === "success" && "Login successful!"}
+            {status === "error" && "Login verification failed"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {message && (
+            <Alert className={status === "error" ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
+              <AlertDescription className={status === "error" ? "text-red-800" : "text-green-800"}>
+                {message}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {status === "error" && (
+            <Button onClick={() => router.push("/login")} className="w-full" variant="outline">
+              Back to Login
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

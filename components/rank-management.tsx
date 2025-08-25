@@ -1,13 +1,17 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Edit, Save, X, GripVertical } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Plus, Edit, Trash2, Shield } from "lucide-react"
 import { getRanks, createRank, updateRank, deleteRank } from "@/lib/supabase"
+import { toast } from "sonner"
 
 interface Rank {
   id: string
@@ -18,222 +22,184 @@ interface Rank {
 export function RankManagement() {
   const [ranks, setRanks] = useState<Rank[]>([])
   const [showRankForm, setShowRankForm] = useState(false)
-  const [editingRank, setEditingRank] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<{ name: string; order_index: number } | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [editingRank, setEditingRank] = useState<Rank | null>(null)
+  const [formData, setFormData] = useState({
+    name: "",
+    order_index: 1,
+  })
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const loadRanks = async () => {
-      try {
-        const ranksData = await getRanks()
-        setRanks(ranksData || [])
-      } catch (error) {
-        console.error("Error loading ranks:", error)
-        setRanks([])
-      }
-      setLoading(false)
-    }
-
     loadRanks()
   }, [])
 
-  const handleCreateRank = async (formData: FormData) => {
-    const name = formData.get("name") as string
-    const orderIndex = Number.parseInt(formData.get("orderIndex") as string) || ranks.length + 1
-
-    if (!name) {
-      alert("Rank name is required")
-      return
-    }
-
+  const loadRanks = async () => {
     try {
-      const newRank = {
-        name,
-        order_index: orderIndex,
-      }
-
-      const createdRank = await createRank(newRank)
-      const updatedRanks = [...ranks, createdRank].sort((a, b) => a.order_index - b.order_index)
-      setRanks(updatedRanks)
-      setShowRankForm(false)
-      alert("Rank created successfully!")
+      const data = await getRanks()
+      setRanks(data)
     } catch (error) {
-      console.error("Error creating rank:", error)
-      alert("Error creating rank. Please try again.")
+      console.error("Error loading ranks:", error)
+      toast.error("Failed to load ranks")
     }
   }
 
-  const handleEditRank = (rank: Rank) => {
-    setEditingRank(rank.id)
-    setEditForm({ name: rank.name, order_index: rank.order_index })
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editForm || !editingRank) return
-
-    try {
-      const updatedRank = await updateRank(editingRank, {
-        name: editForm.name,
-        order_index: editForm.order_index,
-      })
-
-      const updatedRanks = ranks
-        .map((rank) => (rank.id === editingRank ? updatedRank : rank))
-        .sort((a, b) => a.order_index - b.order_index)
-      setRanks(updatedRanks)
-
-      setEditingRank(null)
-      setEditForm(null)
-      alert("Rank updated successfully!")
-    } catch (error) {
-      console.error("Error updating rank:", error)
-      alert("Error updating rank. Please try again.")
-    }
-  }
-
-  const handleCancelEdit = () => {
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      order_index: ranks.length + 1,
+    })
     setEditingRank(null)
-    setEditForm(null)
   }
 
-  const handleDeleteRank = async (rankId: string, rankName: string) => {
-    if (confirm(`Are you sure you want to delete the rank "${rankName}"?`)) {
-      try {
-        await deleteRank(rankId)
-        const updatedRanks = ranks.filter((rank) => rank.id !== rankId)
-        setRanks(updatedRanks)
-        alert("Rank deleted successfully!")
-      } catch (error) {
-        console.error("Error deleting rank:", error)
-        alert("Error deleting rank. Please try again.")
+  const handleEdit = (rank: Rank) => {
+    setEditingRank(rank)
+    setFormData({
+      name: rank.name,
+      order_index: rank.order_index,
+    })
+    setShowRankForm(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      if (editingRank) {
+        await updateRank(editingRank.id, formData)
+        toast.success("Rank updated successfully!")
+      } else {
+        await createRank(formData)
+        toast.success("Rank created successfully!")
       }
+
+      setShowRankForm(false)
+      resetForm()
+      loadRanks()
+    } catch (error) {
+      console.error("Error saving rank:", error)
+      toast.error("Failed to save rank")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (rankId: string) => {
+    if (!confirm("Are you sure you want to delete this rank?")) return
+
+    try {
+      await deleteRank(rankId)
+      toast.success("Rank deleted successfully!")
+      loadRanks()
+    } catch (error) {
+      console.error("Error deleting rank:", error)
+      toast.error("Failed to delete rank")
     }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Rank Management</h2>
-        <Button onClick={() => setShowRankForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Rank
+        <div>
+          <h3 className="text-lg font-medium">Rank Management</h3>
+          <p className="text-sm text-gray-600">Manage military ranks and their hierarchy</p>
+        </div>
+        <Button
+          onClick={() => {
+            resetForm()
+            setShowRankForm(true)
+          }}
+          className="flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Rank
         </Button>
       </div>
 
-      <div className="bg-blue-50 p-4 rounded-md text-sm text-blue-800">
-        <strong>Rank Management:</strong> Create and organize custom ranks. The order index determines the hierarchy
-        (lower numbers = higher priority).
-      </div>
-
-      {showRankForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Rank</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={handleCreateRank} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Rank Name</Label>
-                  <Input id="name" name="name" type="text" placeholder="Enter rank name" required />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="orderIndex">Order Index</Label>
-                  <Input
-                    id="orderIndex"
-                    name="orderIndex"
-                    type="number"
-                    placeholder="Enter order (1, 2, 3...)"
-                    defaultValue={ranks.length + 1}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setShowRankForm(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Create Rank</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4">
-        {loading ? (
-          <div className="text-center py-8">Loading ranks...</div>
-        ) : ranks.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-gray-500">No ranks found</p>
-            </CardContent>
-          </Card>
-        ) : (
-          ranks.map((rank) => (
-            <Card key={rank.id}>
-              <CardContent className="pt-6">
-                {editingRank === rank.id && editForm ? (
-                  // Edit mode
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Rank Name</Label>
-                        <Input
-                          value={editForm.name}
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Order Index</Label>
-                        <Input
-                          type="number"
-                          value={editForm.order_index}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, order_index: Number.parseInt(e.target.value) || 0 })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end space-x-2">
-                      <Button variant="outline" onClick={handleCancelEdit}>
-                        <X className="w-4 h-4 mr-2" />
-                        Cancel
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Military Ranks
+          </CardTitle>
+          <CardDescription>Manage the hierarchy of military ranks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Order</TableHead>
+                <TableHead>Rank Name</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ranks.map((rank) => (
+                <TableRow key={rank.id}>
+                  <TableCell>{rank.order_index}</TableCell>
+                  <TableCell className="font-medium">{rank.name}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(rank)}>
+                        <Edit className="h-4 w-4" />
                       </Button>
-                      <Button onClick={handleSaveEdit}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save Changes
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(rank.id)}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  </div>
-                ) : (
-                  // View mode
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-3">
-                      <GripVertical className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <h3 className="font-semibold">{rank.name}</h3>
-                        <p className="text-sm text-gray-600">Order: {rank.order_index}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="outline">#{rank.order_index}</Badge>
-                      <Button variant="outline" size="sm" onClick={() => handleEditRank(rank)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteRank(rank.id, rank.name)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showRankForm} onOpenChange={setShowRankForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingRank ? "Edit Rank" : "Create New Rank"}</DialogTitle>
+            <DialogDescription>
+              {editingRank ? "Update rank information" : "Add a new military rank to the system"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Rank Name</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Enter rank name"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="order_index">Order Index</Label>
+              <Input
+                id="order_index"
+                type="number"
+                value={formData.order_index}
+                onChange={(e) => setFormData({ ...formData, order_index: Number.parseInt(e.target.value) })}
+                placeholder="Enter order index"
+                min="1"
+                required
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowRankForm(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Saving..." : editingRank ? "Update Rank" : "Create Rank"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

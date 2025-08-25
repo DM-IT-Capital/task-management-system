@@ -1,39 +1,31 @@
 "use client"
 
+import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Trash2, Edit, Save, X, RefreshCw } from "lucide-react"
-import type { User } from "@/lib/auth"
-import {
-  getUsers,
-  createUser as createUserDB,
-  updateUser as updateUserDB,
-  deleteUser as deleteUserDB,
-  getRanks,
-} from "@/lib/supabase"
+import { Plus, Edit, Trash2, Users } from "lucide-react"
+import { createUser, updateUser, deleteUser, getRanks } from "@/lib/supabase"
+import { toast } from "sonner"
 
-interface UserData {
+interface User {
   id: string
   username: string
-  email?: string
+  email: string
   full_name: string
   troop_rank: string
   role: string
-  permissions: {
-    can_create_tasks: boolean
-    can_delete_tasks: boolean
-    can_manage_users: boolean
-  }
-  currentPassword?: string
-  newPassword?: string
-  confirmPassword?: string
-  password?: string
+  can_create_tasks: boolean
+  can_delete_tasks: boolean
+  can_manage_users: boolean
+  created_at: string
 }
 
 interface Rank {
@@ -43,330 +35,333 @@ interface Rank {
 }
 
 interface UserManagementProps {
-  currentUser: User
+  users: User[]
+  onUsersChange: () => void
 }
 
-export function UserManagement({ currentUser }: UserManagementProps) {
-  const [users, setUsers] = useState<UserData[]>([])
+export function UserManagement({ users: initialUsers, onUsersChange }: UserManagementProps) {
+  const [users, setUsers] = useState<User[]>(initialUsers)
   const [ranks, setRanks] = useState<Rank[]>([])
   const [showUserForm, setShowUserForm] = useState(false)
-  const [editingUser, setEditingUser] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<UserData | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  // Check if current user is admin
-  const isAdmin = currentUser.permissions.can_manage_users
-
-  const resetToDefaults = async () => {
-    if (!isAdmin) {
-      alert("You don't have permission to reset system data")
-      return
-    }
-
-    if (confirm("This will reset all users to default settings. Are you sure?")) {
-      try {
-        window.location.reload()
-      } catch (error) {
-        console.error("Error resetting system:", error)
-        alert("Error resetting system. Please try again.")
-      }
-    }
-  }
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+    email: "",
+    full_name: "",
+    troop_rank: "",
+    role: "user",
+    can_create_tasks: false,
+    can_delete_tasks: false,
+    can_manage_users: false,
+  })
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Load ranks
-        const ranksData = await getRanks()
-        setRanks(ranksData || [])
+    loadRanks()
+    setUsers(initialUsers)
+  }, [initialUsers])
 
-        // Load users
-        const allUsers = await getUsers()
+  const loadRanks = async () => {
+    try {
+      const ranksData = await getRanks()
+      setRanks(ranksData)
+    } catch (error) {
+      console.error("Error loading ranks:", error)
+    }
+  }
 
-        // Filter users based on permissions
-        if (isAdmin) {
-          // Admin can see all users
-          setUsers(allUsers || [])
-        } else {
-          // Regular user can only see their own profile
-          const currentUserData = allUsers?.find((user: UserData) => user.id === currentUser.id)
-          setUsers(currentUserData ? [currentUserData] : [])
+  const resetForm = () => {
+    setFormData({
+      username: "",
+      password: "",
+      email: "",
+      full_name: "",
+      troop_rank: "",
+      role: "user",
+      can_create_tasks: false,
+      can_delete_tasks: false,
+      can_manage_users: false,
+    })
+    setEditingUser(null)
+  }
+
+  const handleEdit = (user: User) => {
+    setEditingUser(user)
+    setFormData({
+      username: user.username,
+      password: "",
+      email: user.email || "",
+      full_name: user.full_name,
+      troop_rank: user.troop_rank,
+      role: user.role,
+      can_create_tasks: user.can_create_tasks,
+      can_delete_tasks: user.can_delete_tasks,
+      can_manage_users: user.can_manage_users,
+    })
+    setShowUserForm(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      console.log("Form submission started", { editingUser: !!editingUser, formData })
+
+      if (editingUser) {
+        // Update existing user
+        const updateData: any = {
+          username: formData.username,
+          email: formData.email,
+          full_name: formData.full_name,
+          troop_rank: formData.troop_rank,
+          role: formData.role,
+          can_create_tasks: formData.can_create_tasks,
+          can_delete_tasks: formData.can_delete_tasks,
+          can_manage_users: formData.can_manage_users,
         }
-      } catch (error) {
-        console.error("Error loading data:", error)
-        // Fallback to default admin user if database fails
-        const defaultUsers = [
-          {
-            id: "1",
-            username: "admin",
-            full_name: "System Administrator",
-            troop_rank: "Colonel",
-            role: "admin",
-            permissions: {
-              can_create_tasks: true,
-              can_delete_tasks: true,
-              can_manage_users: true,
-            },
-            password: "admin123",
-          },
-        ]
-        setUsers(isAdmin ? defaultUsers : defaultUsers.filter((u) => u.id === currentUser.id))
+
+        if (formData.password) {
+          updateData.password = formData.password
+        }
+
+        console.log("Updating user with data:", updateData)
+        await updateUser(editingUser.id, updateData)
+        toast.success("User updated successfully!")
+      } else {
+        // Create new user
+        if (!formData.password) {
+          toast.error("Password is required for new users")
+          setLoading(false)
+          return
+        }
+
+        if (!formData.username.trim()) {
+          toast.error("Username is required")
+          setLoading(false)
+          return
+        }
+
+        if (!formData.full_name.trim()) {
+          toast.error("Full name is required")
+          setLoading(false)
+          return
+        }
+
+        if (!formData.troop_rank) {
+          toast.error("Rank is required")
+          setLoading(false)
+          return
+        }
+
+        const createData = {
+          username: formData.username.trim(),
+          password: formData.password,
+          email: formData.email.trim() || undefined,
+          full_name: formData.full_name.trim(),
+          troop_rank: formData.troop_rank,
+          role: formData.role,
+          can_create_tasks: formData.can_create_tasks,
+          can_delete_tasks: formData.can_delete_tasks,
+          can_manage_users: formData.can_manage_users,
+        }
+
+        console.log("Creating new user with data:", createData)
+        await createUser(createData)
+        toast.success("User created successfully!")
       }
+
+      setShowUserForm(false)
+      resetForm()
+      onUsersChange()
+    } catch (error) {
+      console.error("Error saving user:", error)
+      toast.error(`${error instanceof Error ? error.message : "Unknown error occurred"}`)
+    } finally {
       setLoading(false)
     }
+  }
 
-    loadData()
-  }, [currentUser.id, isAdmin])
-
-  const handleCreateUser = async (formData: FormData) => {
-    if (!isAdmin) {
-      alert("You don't have permission to create users")
-      return
-    }
-
-    const username = formData.get("username") as string
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-    const fullName = formData.get("fullName") as string
-    const troopRank = formData.get("troopRank") as string
-    const role = formData.get("role") as string
-    const canCreateTasks = formData.get("canCreateTasks") === "on"
-    const canDeleteTasks = formData.get("canDeleteTasks") === "on"
-    const canManageUsers = formData.get("canManageUsers") === "on"
-
-    if (!username || !email || !password || !fullName || !troopRank) {
-      alert("All fields are required")
-      return
-    }
+  const handleDelete = async (userId: string) => {
+    if (!confirm("Are you sure you want to delete this user?")) return
 
     try {
-      const newUser = {
-        username,
-        email,
-        password_hash: password,
-        full_name: fullName,
-        troop_rank: troopRank,
-        role,
-        permissions: {
-          can_create_tasks: canCreateTasks,
-          can_delete_tasks: canDeleteTasks,
-          can_manage_users: canManageUsers,
-        },
-      }
-
-      const createdUser = await createUserDB(newUser)
-      const updatedUsers = [...users, { ...createdUser, password }]
-      setUsers(updatedUsers)
-      setShowUserForm(false)
-      alert("User created successfully!")
+      await deleteUser(userId)
+      toast.success("User deleted successfully!")
+      onUsersChange()
     } catch (error) {
-      console.error("Error creating user:", error)
-      alert("Error creating user. Please try again.")
-    }
-  }
-
-  const handleEditUser = (user: UserData) => {
-    // Users can only edit their own profile, admins can edit anyone
-    if (!isAdmin && user.id !== currentUser.id) {
-      alert("You can only edit your own profile")
-      return
-    }
-
-    setEditingUser(user.id)
-    setEditForm({ ...user })
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editForm) return
-
-    // Users can only edit their own profile, admins can edit anyone
-    if (!isAdmin && editForm.id !== currentUser.id) {
-      alert("You can only edit your own profile")
-      return
-    }
-
-    // Check if password change is being attempted
-    const isPasswordChangeAttempted = editForm.currentPassword || editForm.newPassword || editForm.confirmPassword
-
-    if (isPasswordChangeAttempted) {
-      // Get current user data to check current password
-      const currentUserData = users.find((u: UserData) => u.id === editForm.id)
-      const storedPassword = currentUserData?.password || "admin123"
-
-      if (!editForm.currentPassword) {
-        alert("Please enter your current password to change it")
-        return
-      }
-
-      if (editForm.currentPassword !== storedPassword) {
-        alert("Current password is incorrect")
-        return
-      }
-
-      if (!editForm.newPassword) {
-        alert("Please enter a new password")
-        return
-      }
-
-      if (editForm.newPassword.length < 3) {
-        alert("New password must be at least 3 characters long")
-        return
-      }
-
-      if (editForm.newPassword !== editForm.confirmPassword) {
-        alert("New password and confirm password do not match")
-        return
-      }
-    }
-
-    try {
-      // Create updated user object
-      const updatedUser = {
-        username: editForm.username,
-        full_name: editForm.full_name,
-        troop_rank: editForm.troop_rank,
-        role: editForm.role,
-        permissions: editForm.permissions,
-        ...(isPasswordChangeAttempted && { password_hash: editForm.newPassword }),
-      }
-
-      await updateUserDB(editForm.id, updatedUser)
-
-      // Update local state
-      const updatedUsers = users.map((user) =>
-        user.id === editForm.id
-          ? {
-              ...user,
-              ...updatedUser,
-              password: isPasswordChangeAttempted ? editForm.newPassword : user.password,
-            }
-          : user,
-      )
-      setUsers(updatedUsers)
-
-      setEditingUser(null)
-      setEditForm(null)
-
-      if (isPasswordChangeAttempted) {
-        alert("Profile updated successfully! Password has been changed.")
-      } else {
-        alert("Profile updated successfully!")
-      }
-    } catch (error) {
-      console.error("Error updating user:", error)
-      alert("Error updating user. Please try again.")
-    }
-  }
-
-  const handleCancelEdit = () => {
-    setEditingUser(null)
-    setEditForm(null)
-  }
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!isAdmin) {
-      alert("You don't have permission to delete users")
-      return
-    }
-
-    if (userId === "1") {
-      alert("Cannot delete the main admin user")
-      return
-    }
-
-    if (userId === currentUser.id) {
-      alert("You cannot delete your own account")
-      return
-    }
-
-    if (confirm("Are you sure you want to delete this user?")) {
-      try {
-        await deleteUserDB(userId)
-        const updatedUsers = users.filter((user: UserData) => user.id !== userId)
-        setUsers(updatedUsers)
-      } catch (error) {
-        console.error("Error deleting user:", error)
-        alert("Error deleting user. Please try again.")
-      }
+      console.error("Error deleting user:", error)
+      toast.error("Failed to delete user")
     }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">{isAdmin ? "User Management" : "My Profile"}</h2>
-        <div className="flex space-x-2">
-          {isAdmin && (
-            <>
-              <Button variant="outline" onClick={resetToDefaults}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Reset to Defaults
-              </Button>
-              <Button onClick={() => setShowUserForm(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create User
-              </Button>
-            </>
-          )}
+        <div>
+          <h3 className="text-lg font-medium">User Management</h3>
+          <p className="text-sm text-gray-600">Manage system users and their permissions</p>
         </div>
+        <Button
+          onClick={() => {
+            resetForm()
+            setShowUserForm(true)
+          }}
+          className="flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add User
+        </Button>
       </div>
 
-      {/* Permission info */}
-      <div className="bg-blue-50 p-4 rounded-md text-sm text-blue-800">
-        {isAdmin ? <strong>Admin Access:</strong> : <strong>User Access:</strong>}{" "}
-        {isAdmin ? "You can view and manage all users in the system." : "You can only view and edit your own profile."}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            System Users
+          </CardTitle>
+          <CardDescription>Manage users and their access permissions</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Full Name</TableHead>
+                <TableHead>Rank</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="font-medium">{user.username}</TableCell>
+                  <TableCell>{user.full_name}</TableCell>
+                  <TableCell>{user.troop_rank}</TableCell>
+                  <TableCell>
+                    <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {user.can_create_tasks && <Badge variant="outline">Create</Badge>}
+                      {user.can_delete_tasks && <Badge variant="outline">Delete</Badge>}
+                      {user.can_manage_users && <Badge variant="outline">Manage</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(user.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      {isAdmin && showUserForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New User</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={handleCreateUser} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input id="username" name="username" type="text" placeholder="Enter username" required />
-                </div>
+      <Dialog open={showUserForm} onOpenChange={setShowUserForm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingUser ? "Edit User" : "Create New User"}</DialogTitle>
+            <DialogDescription>
+              {editingUser ? "Update user information and permissions" : "Add a new user to the system"}
+            </DialogDescription>
+          </DialogHeader>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" placeholder="Enter email address" required />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input id="password" name="password" type="password" placeholder="Enter password" required />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" name="fullName" placeholder="Enter full name" required />
-                </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username *</Label>
+                <Input
+                  id="username"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  placeholder="Enter username"
+                  required
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="troopRank">Rank</Label>
-                <Select name="troopRank">
+                <Label htmlFor="password">Password {editingUser ? "(leave blank to keep current)" : "*"}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Enter password"
+                  required={!editingUser}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email (optional)</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Enter email address (optional)"
+              />
+              <p className="text-xs text-gray-500">Leave empty if no email address is available</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="full_name">Full Name *</Label>
+              <Input
+                id="full_name"
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Enter full name"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="troop_rank">Rank *</Label>
+                <Select
+                  value={formData.troop_rank}
+                  onValueChange={(value) => setFormData({ ...formData, troop_rank: value })}
+                  required
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select rank" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ranks.map((rank) => (
-                      <SelectItem key={rank.id} value={rank.name}>
-                        {rank.name}
-                      </SelectItem>
-                    ))}
+                    {ranks.length > 0 ? (
+                      ranks.map((rank) => (
+                        <SelectItem key={rank.id} value={rank.name}>
+                          {rank.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Private">Private</SelectItem>
+                        <SelectItem value="Corporal">Corporal</SelectItem>
+                        <SelectItem value="Sergeant">Sergeant</SelectItem>
+                        <SelectItem value="Lieutenant">Lieutenant</SelectItem>
+                        <SelectItem value="Captain">Captain</SelectItem>
+                        <SelectItem value="Major">Major</SelectItem>
+                        <SelectItem value="Colonel">Colonel</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select name="role" defaultValue="user">
+                <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -376,259 +371,49 @@ export function UserManagement({ currentUser }: UserManagementProps) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              <div className="space-y-4">
-                <Label>Permissions</Label>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="canCreateTasks" name="canCreateTasks" defaultChecked />
-                    <Label htmlFor="canCreateTasks">Can create tasks</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="canDeleteTasks" name="canDeleteTasks" />
-                    <Label htmlFor="canDeleteTasks">Can delete tasks</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="canManageUsers" name="canManageUsers" />
-                    <Label htmlFor="canManageUsers">Can manage users</Label>
-                  </div>
+            <div className="space-y-4">
+              <Label>Permissions</Label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="can_create_tasks">Can Create Tasks</Label>
+                  <Switch
+                    id="can_create_tasks"
+                    checked={formData.can_create_tasks}
+                    onCheckedChange={(checked) => setFormData({ ...formData, can_create_tasks: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="can_delete_tasks">Can Delete Tasks</Label>
+                  <Switch
+                    id="can_delete_tasks"
+                    checked={formData.can_delete_tasks}
+                    onCheckedChange={(checked) => setFormData({ ...formData, can_delete_tasks: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="can_manage_users">Can Manage Users</Label>
+                  <Switch
+                    id="can_manage_users"
+                    checked={formData.can_manage_users}
+                    onCheckedChange={(checked) => setFormData({ ...formData, can_manage_users: checked })}
+                  />
                 </div>
               </div>
+            </div>
 
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setShowUserForm(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Create User</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4">
-        {loading ? (
-          <div className="text-center py-8">Loading...</div>
-        ) : users.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-gray-500">No users found</p>
-            </CardContent>
-          </Card>
-        ) : (
-          users.map((user) => (
-            <Card key={user.id}>
-              <CardContent className="pt-6">
-                {editingUser === user.id && editForm ? (
-                  // Edit mode
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Full Name</Label>
-                        <Input
-                          value={editForm.full_name}
-                          onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Email</Label>
-                        <Input
-                          type="email"
-                          value={editForm.email || ""}
-                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Username</Label>
-                        <Input
-                          value={editForm.username}
-                          onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Rank</Label>
-                        <Select
-                          value={editForm.troop_rank}
-                          onValueChange={(value) => setEditForm({ ...editForm, troop_rank: value })}
-                          disabled={!isAdmin && editForm.id !== currentUser.id}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ranks.map((rank) => (
-                              <SelectItem key={rank.id} value={rank.name}>
-                                {rank.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Password change section */}
-                    <div className="space-y-4 border-t pt-4">
-                      <Label className="text-sm font-medium">Change Password (Optional)</Label>
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="space-y-2">
-                          <Label>Current Password</Label>
-                          <Input
-                            type="password"
-                            placeholder="Enter current password"
-                            value={editForm.currentPassword || ""}
-                            onChange={(e) => setEditForm({ ...editForm, currentPassword: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>New Password</Label>
-                          <Input
-                            type="password"
-                            placeholder="Enter new password"
-                            value={editForm.newPassword || ""}
-                            onChange={(e) => setEditForm({ ...editForm, newPassword: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Confirm New Password</Label>
-                          <Input
-                            type="password"
-                            placeholder="Confirm new password"
-                            value={editForm.confirmPassword || ""}
-                            onChange={(e) => setEditForm({ ...editForm, confirmPassword: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Role</Label>
-                        <Select
-                          value={editForm.role}
-                          onValueChange={(value) => setEditForm({ ...editForm, role: value })}
-                          disabled={!isAdmin}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="user">User</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Only admins can edit permissions */}
-                    {isAdmin && (
-                      <div className="space-y-2">
-                        <Label>Permissions</Label>
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={editForm.permissions.can_create_tasks}
-                              onCheckedChange={(checked) =>
-                                setEditForm({
-                                  ...editForm,
-                                  permissions: { ...editForm.permissions, can_create_tasks: !!checked },
-                                })
-                              }
-                            />
-                            <Label>Can create tasks</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={editForm.permissions.can_delete_tasks}
-                              onCheckedChange={(checked) =>
-                                setEditForm({
-                                  ...editForm,
-                                  permissions: { ...editForm.permissions, can_delete_tasks: !!checked },
-                                })
-                              }
-                            />
-                            <Label>Can delete tasks</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={editForm.permissions.can_manage_users}
-                              onCheckedChange={(checked) =>
-                                setEditForm({
-                                  ...editForm,
-                                  permissions: { ...editForm.permissions, can_manage_users: !!checked },
-                                })
-                              }
-                            />
-                            <Label>Can manage users</Label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex justify-end space-x-2">
-                      <Button variant="outline" onClick={handleCancelEdit}>
-                        <X className="w-4 h-4 mr-2" />
-                        Cancel
-                      </Button>
-                      <Button onClick={handleSaveEdit}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save Changes
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  // View mode
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-semibold">{user.full_name}</h3>
-                        <Badge variant="outline">{user.role}</Badge>
-                        {user.id === currentUser.id && (
-                          <Badge variant="secondary" className="text-xs">
-                            You
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">@{user.username}</p>
-                      <p className="text-sm text-gray-600">📧 {user.email || "No email set"}</p>
-                      <p className="text-sm text-gray-600">Rank: {user.troop_rank}</p>
-                      <div className="flex flex-wrap gap-1">
-                        {user.permissions.can_create_tasks && (
-                          <Badge variant="secondary" className="text-xs">
-                            Create Tasks
-                          </Badge>
-                        )}
-                        {user.permissions.can_delete_tasks && (
-                          <Badge variant="secondary" className="text-xs">
-                            Delete Tasks
-                          </Badge>
-                        )}
-                        {user.permissions.can_manage_users && (
-                          <Badge variant="secondary" className="text-xs">
-                            Manage Users
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEditUser(user)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      {isAdmin && user.id !== "1" && user.id !== currentUser.id && (
-                        <Button variant="outline" size="sm" onClick={() => handleDeleteUser(user.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowUserForm(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Saving..." : editingUser ? "Update User" : "Create User"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

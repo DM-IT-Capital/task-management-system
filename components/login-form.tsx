@@ -2,134 +2,106 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useRouter } from "next/navigation"
-import { getUserByUsername } from "@/lib/supabase"
-import Link from "next/link"
+import { Loader2 } from "lucide-react"
 
 export function LoginForm() {
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  // Clear any existing user session on component mount
-  useEffect(() => {
-    document.cookie = "user=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT"
-  }, [])
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError("")
-
-    const formData = new FormData(e.currentTarget)
-    const username = formData.get("username") as string
-    const password = formData.get("password") as string
-
-    if (!username || !password) {
-      setError("Username and password are required")
-      setLoading(false)
-      return
-    }
+    setIsLoading(true)
 
     try {
-      let user = null
+      console.log("Submitting login form...")
 
-      try {
-        // Try to get user from database
-        user = await getUserByUsername(username)
-      } catch (dbError) {
-        console.error("Database error:", dbError)
-        setError("Database connection failed. Please check your internet connection and try again.")
-        setLoading(false)
-        return
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      })
+
+      const data = await response.json()
+      console.log("Login response:", data)
+
+      if (response.ok && data.success) {
+        console.log("Login successful, redirecting to dashboard...")
+        // Force a hard redirect to ensure cookies are properly set
+        window.location.href = "/dashboard"
+      } else {
+        setError(data.error || "Login failed")
+        console.error("Login failed:", data)
       }
-
-      if (!user) {
-        setError("Invalid username or password")
-        setLoading(false)
-        return
-      }
-
-      // Check password (accept stored password_hash or "admin123" for admin)
-      const isValidPassword = password === user.password_hash || (username === "admin" && password === "admin123")
-
-      if (!isValidPassword) {
-        setError("Invalid username or password")
-        setLoading(false)
-        return
-      }
-
-      // Set user session
-      const userSession = {
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        troop_rank: user.troop_rank,
-        role: user.role,
-        permissions: user.permissions,
-      }
-
-      document.cookie = `user=${JSON.stringify(userSession)}; path=/; max-age=${60 * 60 * 24 * 7}`
-
-      // Small delay to ensure cookie is set
-      setTimeout(() => {
-        router.push("/dashboard")
-      }, 100)
     } catch (error) {
       console.error("Login error:", error)
-      setError("System error occurred. Please try again.")
+      setError("Network error. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Login</CardTitle>
+        <CardTitle>Sign In</CardTitle>
         <CardDescription>Enter your credentials to access the system</CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {error}
-                {error.includes("Database connection failed") && (
-                  <div className="mt-2">
-                    <Link href="/test-db" className="text-blue-600 underline text-sm">
-                      → Test Database Connection
-                    </Link>
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
-            <Input id="username" name="username" type="text" placeholder="Enter username" required />
+            <Input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              disabled={isLoading}
+              placeholder="Enter your username"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" placeholder="Enter password" required />
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+              placeholder="Enter your password"
+            />
           </div>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </Button>
-          <Link href="/test-db" className="text-sm text-blue-600 hover:underline">
-            Test Database Connection
-          </Link>
-        </CardFooter>
-      </form>
+        </form>
+      </CardContent>
     </Card>
   )
 }
