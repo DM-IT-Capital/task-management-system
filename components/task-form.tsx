@@ -174,18 +174,25 @@ export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, edi
         <Label htmlFor="assigned_to">Assign To</Label>
         <Select
           value={formData.assigned_to}
-          onValueChange={(value) => setFormData({ ...formData, assigned_to: value })}
+          onValueChange={(value) => setFormData({ ...formData, assigned_to: value === "" ? "" : value })}
         >
           <SelectTrigger>
             <SelectValue placeholder="Select user (optional)" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="unassigned">Unassigned</SelectItem>
-            {users.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.full_name} ({user.troop_rank})
-              </SelectItem>
-            ))}
+            {/* Add current user first */}
+            <SelectItem key={currentUser.id} value={currentUser.id}>
+              {currentUser.full_name} ({currentUser.troop_rank}) - Me
+            </SelectItem>
+            {/* Then add other users, excluding current user to avoid duplicates */}
+            {users
+              .filter((user) => user.id !== currentUser.id)
+              .map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.full_name} ({user.troop_rank})
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
