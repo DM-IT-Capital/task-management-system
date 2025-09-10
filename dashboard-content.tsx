@@ -1,459 +1,241 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
-  Plus,
-  LogOut,
-  Calendar,
-  Clock,
-  User,
-  AlertTriangle,
-  CheckCircle,
-  Circle,
-  PlayCircle,
-  Edit,
-  Trash2,
-  Sun,
-  Moon,
-} from "lucide-react"
-import { toast } from "sonner"
-import { getTasks, getUsers, updateTaskStatus, deleteTask } from "@/lib/supabase"
+import { Plus, LogOut, Users, CheckSquare, Trash2, Award, User, Mail } from "lucide-react"
 import { TaskForm } from "@/components/task-form"
 import { UserManagement } from "@/components/user-management"
 import { RankManagement } from "@/components/rank-management"
-import { SLAManagement } from "@/components/sla-management"
-
-interface DashboardUser {
-  id: string
-  username: string
-  email: string
-  full_name: string
-  troop_rank: string
-  role: string
-  can_create_tasks: boolean
-  can_delete_tasks: boolean
-  can_manage_users: boolean
-  created_at: string
-}
+import { logoutAction } from "@/app/actions/auth"
+import { getTasks, createTask, deleteTask } from "@/lib/supabase"
+import type { User as AuthUser } from "@/lib/auth"
 
 interface Task {
   id: string
   title: string
   description: string
-  priority: "low" | "medium" | "high"
-  status: "pending" | "assigned" | "in_progress" | "on_hold" | "completed"
-  due_date: string | null
+  status: string
+  priority: string
+  assigned_to: string
   created_by: string
-  assigned_to: string | null
+  due_date: string
   created_at: string
-  updated_at: string
+  assigned_user?: {
+    id: string
+    full_name: string
+    email: string
+    troop_rank: string
+  }
   created_user?: {
     id: string
-    username: string
     full_name: string
+    email: string
     troop_rank: string
   }
 }
 
-interface DashboardContentProps {
-  user: DashboardUser
-}
-
-export function DashboardContent({ user }: DashboardContentProps) {
+export function DashboardContent({ user }: { user: AuthUser }) {
   const [tasks, setTasks] = useState<Task[]>([])
-  const [users, setUsers] = useState<DashboardUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("tasks")
   const [showTaskForm, setShowTaskForm] = useState(false)
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
-  const { theme, setTheme } = useTheme()
-  const router = useRouter()
-
-  // Check if user is admin
-  const isAdmin = user.role === "admin"
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [tasksData, usersData] = await Promise.all([
-        getTasks(user.id, user.role),
-        user.can_manage_users ? getUsers() : Promise.resolve([]),
-      ])
-      setTasks(tasksData)
-      setUsers(usersData)
-    } catch (error) {
-      console.error("Error loading data:", error)
-      toast.error("Failed to load data")
-    } finally {
+    const loadTasks = async () => {
+      try {
+        const tasksData = await getTasks()
+        setTasks(tasksData || [])
+      } catch (error) {
+        console.error("Error loading tasks:", error)
+        setTasks([])
+      }
       setLoading(false)
     }
-  }
 
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" })
-      router.push("/login")
-      router.refresh()
-    } catch (error) {
-      console.error("Logout error:", error)
-      toast.error("Logout failed")
-    }
-  }
+    loadTasks()
+  }, [user.id])
 
-  const handleTaskStatusUpdate = async (taskId: string, newStatus: string) => {
-    try {
-      await updateTaskStatus(taskId, newStatus, user.id)
-      await loadData()
-      toast.success("Task status updated")
-    } catch (error) {
-      console.error("Error updating task status:", error)
-      toast.error("Failed to update task status")
-    }
-  }
-
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task)
-    setShowTaskForm(true)
-  }
-
-  const handleDeleteTask = (task: Task) => {
-    // Check if user has permission to delete tasks
-    if (!user.can_delete_tasks && !isAdmin) {
-      toast.error("You don't have permission to delete tasks")
-      return
-    }
-    setTaskToDelete(task)
-    setShowDeleteDialog(true)
-  }
-
-  const confirmDeleteTask = async () => {
-    if (!taskToDelete) return
-
-    // Double check permissions before deleting
-    if (!user.can_delete_tasks && !isAdmin) {
-      toast.error("You don't have permission to delete tasks")
-      setShowDeleteDialog(false)
-      setTaskToDelete(null)
+  const handleDeleteTask = async (taskId: string) => {
+    if (!user.permissions.can_delete_tasks) {
+      alert("You do not have permission to delete tasks")
       return
     }
 
     try {
-      await deleteTask(taskToDelete.id)
-      toast.success("Task deleted successfully")
-      await loadData()
+      await deleteTask(taskId)
+      const updatedTasks = tasks.filter((task) => task.id !== taskId)
+      setTasks(updatedTasks)
     } catch (error) {
       console.error("Error deleting task:", error)
-      toast.error("Failed to delete task")
-    } finally {
-      setShowDeleteDialog(false)
-      setTaskToDelete(null)
-    }
-  }
-
-  const handleTaskFormClose = () => {
-    setShowTaskForm(false)
-    setEditingTask(null)
-  }
-
-  const handleTaskUpdated = () => {
-    handleTaskFormClose()
-    loadData()
-  }
-
-  const handleCreateTaskClick = () => {
-    // Check if user has permission to create tasks
-    if (!user.can_create_tasks && !isAdmin) {
-      toast.error("You don't have permission to create tasks")
-      return
-    }
-    setShowTaskForm(true)
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Circle className="h-4 w-4 text-gray-500" />
-      case "assigned":
-        return <User className="h-4 w-4 text-blue-500" />
-      case "in_progress":
-        return <PlayCircle className="h-4 w-4 text-yellow-500" />
-      case "on_hold":
-        return <Clock className="h-4 w-4 text-orange-500" />
-      case "completed":
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      default:
-        return <Circle className="h-4 w-4 text-gray-500" />
+      alert("Error deleting task. Please try again.")
     }
   }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "high":
-        return "bg-red-100 text-red-800"
+        return "destructive"
       case "medium":
-        return "bg-yellow-100 text-yellow-800"
+        return "default"
       case "low":
-        return "bg-green-100 text-green-800"
+        return "secondary"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "default"
     }
   }
 
-  const getTaskCounts = () => {
-    const total = tasks.length
-    const pending = tasks.filter((t) => t.status === "pending").length
-    const assigned = tasks.filter((t) => t.status === "assigned").length
-    const inProgress = tasks.filter((t) => t.status === "in_progress").length
-    const onHold = tasks.filter((t) => t.status === "on_hold").length
-    const completed = tasks.filter((t) => t.status === "completed").length
-    const overdue = tasks.filter(
-      (t) => t.due_date && new Date(t.due_date) < new Date() && t.status !== "completed",
-    ).length
-
-    return { total, pending, assigned, inProgress, onHold, completed, overdue }
-  }
-
-  const counts = getTaskCounts()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "default"
+      case "in-progress":
+        return "secondary"
+      case "pending":
+        return "outline"
+      default:
+        return "outline"
+    }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Task Management Dashboard</h1>
-              <p className="text-sm text-muted-foreground">
-                Welcome back, {user.full_name} ({user.troop_rank})
+              <h1 className="text-2xl font-bold text-gray-900">Task Management System</h1>
+              <p className="text-sm text-gray-600">
+                Welcome, {user.full_name} ({user.troop_rank})
               </p>
             </div>
-            <div className="flex items-center gap-4">
-              <Button variant="outline" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-              {/* Only show Create Task button if user has permission */}
-              {(user.can_create_tasks || isAdmin) && (
-                <Button onClick={handleCreateTaskClick} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Task
+            <div className="flex items-center space-x-4">
+              <Badge variant="outline">{user.role}</Badge>
+              <form action={logoutAction}>
+                <Button variant="outline" size="sm">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
                 </Button>
-              )}
-              <Button variant="outline" onClick={handleLogout} className="flex items-center gap-2 bg-transparent">
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
+              </form>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.total}</div>
-              <p className="text-xs text-muted-foreground">All tasks in system</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <Circle className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.pending}</div>
-              <p className="text-xs text-muted-foreground">Awaiting assignment</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Assigned</CardTitle>
-              <User className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.assigned}</div>
-              <p className="text-xs text-muted-foreground">Ready to start</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-              <PlayCircle className="h-4 w-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.inProgress}</div>
-              <p className="text-xs text-muted-foreground">Currently active</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.completed}</div>
-              <p className="text-xs text-muted-foreground">Successfully finished</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.overdue}</div>
-              <p className="text-xs text-muted-foreground">Past due date</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-5" : "grid-cols-2"}`}>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="my-tasks">My Tasks</TabsTrigger>
-            {/* Only show admin tabs for admin users */}
-            {isAdmin && (
-              <>
-                {user.can_manage_users && <TabsTrigger value="users">Users</TabsTrigger>}
-                <TabsTrigger value="ranks">Ranks</TabsTrigger>
-                <TabsTrigger value="sla">SLA Settings</TabsTrigger>
-              </>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs defaultValue="tasks" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="tasks">
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Tasks
+            </TabsTrigger>
+            <TabsTrigger value="users">
+              <Users className="w-4 h-4 mr-2" />
+              {user.permissions.can_manage_users ? "User Management" : "My Profile"}
+            </TabsTrigger>
+            {user.permissions.can_manage_users && (
+              <TabsTrigger value="ranks">
+                <Award className="w-4 h-4 mr-2" />
+                Rank Management
+              </TabsTrigger>
             )}
           </TabsList>
 
-          <TabsContent value="tasks" className="space-y-4">
+          <TabsContent value="tasks" className="space-y-6">
             <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-medium">All Tasks</h3>
-                <p className="text-sm text-muted-foreground">Manage all tasks in the system</p>
-              </div>
-              {/* Only show Add Task button if user has permission */}
-              {(user.can_create_tasks || isAdmin) && (
-                <Button onClick={handleCreateTaskClick} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Task
+              <h2 className="text-xl font-semibold">Tasks</h2>
+              {user.permissions.can_create_tasks && (
+                <Button onClick={() => setShowTaskForm(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Task
                 </Button>
               )}
             </div>
 
+            {showTaskForm && (
+              <TaskForm
+                user={user}
+                onClose={() => setShowTaskForm(false)}
+                onTaskCreated={async (newTask) => {
+                  try {
+                    const createdTask = await createTask(newTask)
+                    const updatedTasks = [...tasks, createdTask]
+                    setTasks(updatedTasks)
+                    setShowTaskForm(false)
+                    return createdTask
+                  } catch (error) {
+                    console.error("Error creating task:", error)
+                    alert("Error creating task. Please try again.")
+                    throw error
+                  }
+                }}
+              />
+            )}
+
             <div className="grid gap-4">
-              {tasks.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-8">Loading tasks...</div>
+              ) : tasks.length === 0 ? (
                 <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No tasks have been created yet.</p>
-                    {(user.can_create_tasks || isAdmin) && (
-                      <Button onClick={handleCreateTaskClick} className="mt-4">
-                        Create First Task
-                      </Button>
-                    )}
+                  <CardContent className="text-center py-8">
+                    <p className="text-gray-500">No tasks found</p>
                   </CardContent>
                 </Card>
               ) : (
                 tasks.map((task) => (
                   <Card key={task.id}>
                     <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
                           <CardTitle className="text-lg">{task.title}</CardTitle>
-                          <CardDescription>{task.description}</CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                          <div className="flex items-center gap-1">
-                            {getStatusIcon(task.status)}
-                            <span className="text-sm capitalize">{task.status.replace("_", " ")}</span>
+                          <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+
+                          {/* Assignment and Creation Info */}
+                          <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <User className="w-4 h-4" />
+                              <span>
+                                Assigned to:{" "}
+                                {task.assigned_user ? (
+                                  <span className="font-medium text-gray-700">
+                                    {task.assigned_user.full_name} ({task.assigned_user.troop_rank})
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">Unassigned</span>
+                                )}
+                              </span>
+                            </div>
+
+                            {task.assigned_user?.email && (
+                              <div className="flex items-center gap-1">
+                                <Mail className="w-4 h-4" />
+                                <span>{task.assigned_user.email}</span>
+                              </div>
+                            )}
                           </div>
+
+                          <div className="text-xs text-gray-400 mt-2">
+                            Created by: {task.created_user?.full_name || "Unknown"} on{" "}
+                            {new Date(task.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 ml-4">
+                          <Badge variant={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                          <Badge variant={getStatusColor(task.status)}>{task.status}</Badge>
+                          {user.permissions.can_delete_tasks && (
+                            <Button variant="outline" size="sm" onClick={() => handleDeleteTask(task.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {task.created_user && (
-                            <div className="flex items-center gap-1">
-                              <User className="h-4 w-4" />
-                              Created by {task.created_user.full_name}
-                            </div>
-                          )}
-                          {task.due_date && (
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              Due {new Date(task.due_date).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {task.status !== "completed" && (
-                            <Select
-                              value={task.status}
-                              onValueChange={(value) => handleTaskStatusUpdate(task.id, value)}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="assigned">Assigned</SelectItem>
-                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                <SelectItem value="on_hold">On Hold</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                          <Button variant="outline" size="sm" onClick={() => handleEditTask(task)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {/* Only show delete button if user has permission */}
-                          {(user.can_delete_tasks || isAdmin) && (
-                            <Button variant="outline" size="sm" onClick={() => handleDeleteTask(task)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                      <div className="flex justify-between text-sm text-gray-500">
+                        <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>
+                        <span>Status: {task.status}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -462,139 +244,17 @@ export function DashboardContent({ user }: DashboardContentProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="my-tasks" className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium">My Tasks</h3>
-              <p className="text-sm text-muted-foreground">Tasks assigned to you</p>
-            </div>
-
-            <div className="grid gap-4">
-              {tasks.filter((task) => task.assigned_to === user.id).length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No tasks have been assigned to you yet.</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                tasks
-                  .filter((task) => task.assigned_to === user.id)
-                  .map((task) => (
-                    <Card key={task.id}>
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <CardTitle className="text-lg">{task.title}</CardTitle>
-                            <CardDescription>{task.description}</CardDescription>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                            <div className="flex items-center gap-1">
-                              {getStatusIcon(task.status)}
-                              <span className="text-sm capitalize">{task.status.replace("_", " ")}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            {task.due_date && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-4 w-4" />
-                                Due {new Date(task.due_date).toLocaleDateString()}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {task.status !== "completed" && (
-                              <Select
-                                value={task.status}
-                                onValueChange={(value) => handleTaskStatusUpdate(task.id, value)}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="assigned">Assigned</SelectItem>
-                                  <SelectItem value="in_progress">In Progress</SelectItem>
-                                  <SelectItem value="on_hold">On Hold</SelectItem>
-                                  <SelectItem value="completed">Completed</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            )}
-                            <Button variant="outline" size="sm" onClick={() => handleEditTask(task)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-              )}
-            </div>
+          <TabsContent value="users">
+            <UserManagement currentUser={user} />
           </TabsContent>
 
-          {/* Admin-only tabs */}
-          {isAdmin && user.can_manage_users && (
-            <TabsContent value="users" className="space-y-4">
-              <UserManagement users={users} onUsersChange={loadData} />
-            </TabsContent>
-          )}
-
-          {isAdmin && (
-            <TabsContent value="ranks" className="space-y-4">
+          {user.permissions.can_manage_users && (
+            <TabsContent value="ranks">
               <RankManagement />
             </TabsContent>
           )}
-
-          {isAdmin && (
-            <TabsContent value="sla" className="space-y-4">
-              <SLAManagement />
-            </TabsContent>
-          )}
         </Tabs>
-      </div>
-
-      {/* Task Form Dialog */}
-      <Dialog open={showTaskForm} onOpenChange={handleTaskFormClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
-            <DialogDescription>
-              {editingTask ? "Update the task details" : "Fill in the details to create a new task"}
-            </DialogDescription>
-          </DialogHeader>
-          <TaskForm
-            users={users}
-            onTaskCreated={() => {
-              handleTaskFormClose()
-              loadData()
-            }}
-            onTaskUpdated={handleTaskUpdated}
-            currentUser={user}
-            editingTask={editingTask}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Task Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Task</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete the task "{taskToDelete?.title}"? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteTask} className="bg-red-600 hover:bg-red-700">
-              Delete Task
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </main>
     </div>
   )
 }
