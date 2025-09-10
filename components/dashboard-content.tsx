@@ -33,6 +33,7 @@ import {
   Trash2,
   Sun,
   Moon,
+  Users,
 } from "lucide-react"
 import { toast } from "sonner"
 import { getTasks, getUsers, updateTaskStatus, deleteTask } from "@/lib/supabase"
@@ -71,6 +72,15 @@ interface Task {
     full_name: string
     troop_rank: string
   }
+  task_assignments?: Array<{
+    user_id: string
+    assigned_user: {
+      id: string
+      username: string
+      full_name: string
+      troop_rank: string
+    }
+  }>
 }
 
 interface DashboardContentProps {
@@ -88,6 +98,9 @@ export function DashboardContent({ user }: DashboardContentProps) {
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
   const { theme, setTheme } = useTheme()
   const router = useRouter()
+
+  // Check if user is admin
+  const isAdmin = user.role === "admin"
 
   useEffect(() => {
     loadData()
@@ -138,12 +151,25 @@ export function DashboardContent({ user }: DashboardContentProps) {
   }
 
   const handleDeleteTask = (task: Task) => {
+    // Check if user has permission to delete tasks
+    if (!user.can_delete_tasks && !isAdmin) {
+      toast.error("You don't have permission to delete tasks")
+      return
+    }
     setTaskToDelete(task)
     setShowDeleteDialog(true)
   }
 
   const confirmDeleteTask = async () => {
     if (!taskToDelete) return
+
+    // Double check permissions before deleting
+    if (!user.can_delete_tasks && !isAdmin) {
+      toast.error("You don't have permission to delete tasks")
+      setShowDeleteDialog(false)
+      setTaskToDelete(null)
+      return
+    }
 
     try {
       await deleteTask(taskToDelete.id)
@@ -166,6 +192,15 @@ export function DashboardContent({ user }: DashboardContentProps) {
   const handleTaskUpdated = () => {
     handleTaskFormClose()
     loadData()
+  }
+
+  const handleCreateTaskClick = () => {
+    // Check if user has permission to create tasks
+    if (!user.can_create_tasks && !isAdmin) {
+      toast.error("You don't have permission to create tasks")
+      return
+    }
+    setShowTaskForm(true)
   }
 
   const getStatusIcon = (status: string) => {
@@ -196,6 +231,30 @@ export function DashboardContent({ user }: DashboardContentProps) {
       default:
         return "bg-gray-100 text-gray-800"
     }
+  }
+
+  const getAssignedUsers = (task: Task) => {
+    // For admin users, show multiple assignments from task_assignments
+    if (isAdmin && task.task_assignments && task.task_assignments.length > 0) {
+      return task.task_assignments.map((assignment) => assignment.assigned_user)
+    }
+
+    // For regular users or single assignments, use assigned_to
+    if (task.assigned_to) {
+      const assignedUser = users.find((u) => u.id === task.assigned_to)
+      return assignedUser ? [assignedUser] : []
+    }
+
+    return []
+  }
+
+  const isTaskAssignedToUser = (task: Task, userId: string) => {
+    // Check both single assignment and multiple assignments
+    if (task.assigned_to === userId) return true
+    if (task.task_assignments) {
+      return task.task_assignments.some((assignment) => assignment.user_id === userId)
+    }
+    return false
   }
 
   const getTaskCounts = () => {
@@ -238,10 +297,13 @@ export function DashboardContent({ user }: DashboardContentProps) {
               <Button variant="outline" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button onClick={() => setShowTaskForm(true)} className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Create Task
-              </Button>
+              {/* Only show Create Task button if user has permission */}
+              {(user.can_create_tasks || isAdmin) && (
+                <Button onClick={handleCreateTaskClick} className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Task
+                </Button>
+              )}
               <Button variant="outline" onClick={handleLogout} className="flex items-center gap-2 bg-transparent">
                 <LogOut className="h-4 w-4" />
                 Logout
@@ -323,12 +385,17 @@ export function DashboardContent({ user }: DashboardContentProps) {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-5" : "grid-cols-2"}`}>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="my-tasks">My Tasks</TabsTrigger>
-            {user.can_manage_users && <TabsTrigger value="users">Users</TabsTrigger>}
-            <TabsTrigger value="ranks">Ranks</TabsTrigger>
-            <TabsTrigger value="sla">SLA Settings</TabsTrigger>
+            {/* Only show admin tabs for admin users */}
+            {isAdmin && (
+              <>
+                {user.can_manage_users && <TabsTrigger value="users">Users</TabsTrigger>}
+                <TabsTrigger value="ranks">Ranks</TabsTrigger>
+                <TabsTrigger value="sla">SLA Settings</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <TabsContent value="tasks" className="space-y-4">
@@ -337,10 +404,13 @@ export function DashboardContent({ user }: DashboardContentProps) {
                 <h3 className="text-lg font-medium">All Tasks</h3>
                 <p className="text-sm text-muted-foreground">Manage all tasks in the system</p>
               </div>
-              <Button onClick={() => setShowTaskForm(true)} className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Add Task
-              </Button>
+              {/* Only show Add Task button if user has permission */}
+              {(user.can_create_tasks || isAdmin) && (
+                <Button onClick={handleCreateTaskClick} className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Task
+                </Button>
+              )}
             </div>
 
             <div className="grid gap-4">
@@ -349,98 +419,17 @@ export function DashboardContent({ user }: DashboardContentProps) {
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">No tasks have been created yet.</p>
-                    <Button onClick={() => setShowTaskForm(true)} className="mt-4">
-                      Create First Task
-                    </Button>
+                    {(user.can_create_tasks || isAdmin) && (
+                      <Button onClick={handleCreateTaskClick} className="mt-4">
+                        Create First Task
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ) : (
-                tasks.map((task) => (
-                  <Card key={task.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <CardTitle className="text-lg">{task.title}</CardTitle>
-                          <CardDescription>{task.description}</CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                          <div className="flex items-center gap-1">
-                            {getStatusIcon(task.status)}
-                            <span className="text-sm capitalize">{task.status.replace("_", " ")}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {task.created_user && (
-                            <div className="flex items-center gap-1">
-                              <User className="h-4 w-4" />
-                              Created by {task.created_user.full_name}
-                            </div>
-                          )}
-                          {task.due_date && (
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              Due {new Date(task.due_date).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {task.status !== "completed" && (
-                            <Select
-                              value={task.status}
-                              onValueChange={(value) => handleTaskStatusUpdate(task.id, value)}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="assigned">Assigned</SelectItem>
-                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                <SelectItem value="on_hold">On Hold</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                          <Button variant="outline" size="sm" onClick={() => handleEditTask(task)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {user.can_delete_tasks && (
-                            <Button variant="outline" size="sm" onClick={() => handleDeleteTask(task)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="my-tasks" className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium">My Tasks</h3>
-              <p className="text-sm text-muted-foreground">Tasks assigned to you</p>
-            </div>
-
-            <div className="grid gap-4">
-              {tasks.filter((task) => task.assigned_to === user.id).length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No tasks have been assigned to you yet.</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                tasks
-                  .filter((task) => task.assigned_to === user.id)
-                  .map((task) => (
+                tasks.map((task) => {
+                  const assignedUsers = getAssignedUsers(task)
+                  return (
                     <Card key={task.id}>
                       <CardHeader>
                         <div className="flex items-start justify-between">
@@ -460,6 +449,22 @@ export function DashboardContent({ user }: DashboardContentProps) {
                       <CardContent>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            {task.created_user && (
+                              <div className="flex items-center gap-1">
+                                <User className="h-4 w-4" />
+                                Created by {task.created_user.full_name}
+                              </div>
+                            )}
+                            {assignedUsers.length > 0 && (
+                              <div className="flex items-center gap-1">
+                                {assignedUsers.length > 1 ? (
+                                  <Users className="h-4 w-4" />
+                                ) : (
+                                  <User className="h-4 w-4" />
+                                )}
+                                Assigned to {assignedUsers.map((u) => u.full_name).join(", ")}
+                              </div>
+                            )}
                             {task.due_date && (
                               <div className="flex items-center gap-1">
                                 <Clock className="h-4 w-4" />
@@ -477,6 +482,7 @@ export function DashboardContent({ user }: DashboardContentProps) {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="pending">Pending</SelectItem>
                                   <SelectItem value="assigned">Assigned</SelectItem>
                                   <SelectItem value="in_progress">In Progress</SelectItem>
                                   <SelectItem value="on_hold">On Hold</SelectItem>
@@ -487,28 +493,126 @@ export function DashboardContent({ user }: DashboardContentProps) {
                             <Button variant="outline" size="sm" onClick={() => handleEditTask(task)}>
                               <Edit className="h-4 w-4" />
                             </Button>
+                            {/* Only show delete button if user has permission */}
+                            {(user.can_delete_tasks || isAdmin) && (
+                              <Button variant="outline" size="sm" onClick={() => handleDeleteTask(task)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  ))
+                  )
+                })
               )}
             </div>
           </TabsContent>
 
-          {user.can_manage_users && (
+          <TabsContent value="my-tasks" className="space-y-4">
+            <div>
+              <h3 className="text-lg font-medium">My Tasks</h3>
+              <p className="text-sm text-muted-foreground">Tasks assigned to you</p>
+            </div>
+
+            <div className="grid gap-4">
+              {tasks.filter((task) => isTaskAssignedToUser(task, user.id)).length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No tasks have been assigned to you yet.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                tasks
+                  .filter((task) => isTaskAssignedToUser(task, user.id))
+                  .map((task) => {
+                    const assignedUsers = getAssignedUsers(task)
+                    return (
+                      <Card key={task.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <CardTitle className="text-lg">{task.title}</CardTitle>
+                              <CardDescription>{task.description}</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                              <div className="flex items-center gap-1">
+                                {getStatusIcon(task.status)}
+                                <span className="text-sm capitalize">{task.status.replace("_", " ")}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              {assignedUsers.length > 1 && (
+                                <div className="flex items-center gap-1">
+                                  <Users className="h-4 w-4" />
+                                  Also assigned to{" "}
+                                  {assignedUsers
+                                    .filter((u) => u.id !== user.id)
+                                    .map((u) => u.full_name)
+                                    .join(", ")}
+                                </div>
+                              )}
+                              {task.due_date && (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-4 w-4" />
+                                  Due {new Date(task.due_date).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {task.status !== "completed" && (
+                                <Select
+                                  value={task.status}
+                                  onValueChange={(value) => handleTaskStatusUpdate(task.id, value)}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="assigned">Assigned</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="on_hold">On Hold</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <Button variant="outline" size="sm" onClick={() => handleEditTask(task)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Admin-only tabs */}
+          {isAdmin && user.can_manage_users && (
             <TabsContent value="users" className="space-y-4">
               <UserManagement users={users} onUsersChange={loadData} />
             </TabsContent>
           )}
 
-          <TabsContent value="ranks" className="space-y-4">
-            <RankManagement />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="ranks" className="space-y-4">
+              <RankManagement />
+            </TabsContent>
+          )}
 
-          <TabsContent value="sla" className="space-y-4">
-            <SLAManagement />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="sla" className="space-y-4">
+              <SLAManagement />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
