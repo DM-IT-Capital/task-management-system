@@ -166,11 +166,12 @@ export async function deleteUser(userId: string) {
   }
 }
 
-// Task management functions
+// Task management functions - SIMPLIFIED VERSION
 export async function getTasks(userId?: string, userRole?: string) {
   console.log("Fetching tasks for user:", userId, "role:", userRole)
 
   try {
+    // Start with basic task query
     let query = supabase
       .from("tasks")
       .select(`
@@ -179,20 +180,36 @@ export async function getTasks(userId?: string, userRole?: string) {
       `)
       .order("created_at", { ascending: false })
 
-    // If not admin, only show tasks assigned to user or created by user
+    // Apply user-specific filtering for non-admin users
     if (userId && userRole !== "admin") {
       query = query.or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     }
 
-    const { data, error } = await query
+    const { data: tasks, error } = await query
 
     if (error) {
       console.error("Supabase error fetching tasks:", error)
       return []
     }
 
-    console.log("Tasks fetched:", data?.length || 0)
-    return data || []
+    console.log("Tasks fetched:", tasks?.length || 0)
+
+    // For each task, fetch additional assignments from task_assignments table
+    if (tasks && tasks.length > 0) {
+      for (const task of tasks) {
+        const { data: assignments } = await supabase
+          .from("task_assignments")
+          .select(`
+            user_id,
+            assigned_user:users(id, username, full_name, troop_rank)
+          `)
+          .eq("task_id", task.id)
+
+        task.task_assignments = assignments || []
+      }
+    }
+
+    return tasks || []
   } catch (error) {
     console.error("Error in getTasks function:", error)
     return []
@@ -206,13 +223,22 @@ export async function createTask(taskData: {
   status?: string
   due_date?: string | null
   created_by: string
-  assigned_to?: string
+  assigned_to?: string | string[]
 }) {
   console.log("Creating task with data:", taskData)
 
   try {
-    const status = taskData.status || (taskData.assigned_to ? "assigned" : "pending")
+    // Determine status based on assignment
+    let status = taskData.status || "pending"
+    if (!taskData.status) {
+      if (Array.isArray(taskData.assigned_to) && taskData.assigned_to.length > 0) {
+        status = "assigned"
+      } else if (taskData.assigned_to && taskData.assigned_to !== "unassigned") {
+        status = "assigned"
+      }
+    }
 
+    // Prepare task data for insertion
     const insertData = {
       title: taskData.title,
       description: taskData.description,
@@ -220,12 +246,18 @@ export async function createTask(taskData: {
       status: status,
       due_date: taskData.due_date,
       created_by: taskData.created_by,
-      assigned_to: taskData.assigned_to || null,
+      // Handle single assignment in the main table
+      assigned_to: Array.isArray(taskData.assigned_to)
+        ? null
+        : taskData.assigned_to === "unassigned"
+          ? null
+          : taskData.assigned_to,
     }
 
     console.log("Task insert data:", insertData)
 
-    const { data, error } = await supabase
+    // Create the task
+    const { data: task, error } = await supabase
       .from("tasks")
       .insert([insertData])
       .select(`
@@ -239,8 +271,29 @@ export async function createTask(taskData: {
       throw new Error(`Database error: ${error.message}`)
     }
 
-    console.log("Task created successfully:", data)
-    return data
+    console.log("Task created successfully:", task)
+
+    // Handle multiple assignments for admin users
+    if (Array.isArray(taskData.assigned_to) && taskData.assigned_to.length > 0) {
+      console.log("Creating multiple assignments for task:", task.id, "users:", taskData.assigned_to)
+
+      const assignments = taskData.assigned_to.map((userId) => ({
+        task_id: task.id,
+        user_id: userId,
+        assigned_by: taskData.created_by,
+      }))
+
+      const { error: assignmentError } = await supabase.from("task_assignments").insert(assignments)
+
+      if (assignmentError) {
+        console.error("Error creating task assignments:", assignmentError)
+        // Don't throw error here, task is already created successfully
+      } else {
+        console.log("Task assignments created successfully")
+      }
+    }
+
+    return task
   } catch (error) {
     console.error("Error in createTask function:", error)
     throw error
@@ -255,19 +308,33 @@ export async function updateTask(
     priority: string
     status?: string
     due_date?: string | null
-    assigned_to?: string
+    assigned_to?: string | string[]
   },
 ) {
   console.log("Updating task:", taskId, "with data:", taskData)
 
   try {
+    // Determine status based on assignment
+    let status = taskData.status || "pending"
+    if (!taskData.status) {
+      if (Array.isArray(taskData.assigned_to) && taskData.assigned_to.length > 0) {
+        status = "assigned"
+      } else if (taskData.assigned_to && taskData.assigned_to !== "unassigned") {
+        status = "assigned"
+      }
+    }
+
     const updateData = {
       title: taskData.title,
       description: taskData.description,
       priority: taskData.priority,
-      status: taskData.status,
+      status: status,
       due_date: taskData.due_date,
-      assigned_to: taskData.assigned_to || null,
+      assigned_to: Array.isArray(taskData.assigned_to)
+        ? null
+        : taskData.assigned_to === "unassigned"
+          ? null
+          : taskData.assigned_to,
       updated_at: new Date().toISOString(),
     }
 
@@ -286,6 +353,31 @@ export async function updateTask(
     if (error) {
       console.error("Supabase error updating task:", error)
       throw new Error(`Database error: ${error.message}`)
+    }
+
+    // Handle multiple assignments for admin users
+    if (Array.isArray(taskData.assigned_to)) {
+      console.log("Updating multiple assignments for task:", taskId, "users:", taskData.assigned_to)
+
+      // First, remove existing assignments
+      await supabase.from("task_assignments").delete().eq("task_id", taskId)
+
+      // Then add new assignments if any
+      if (taskData.assigned_to.length > 0) {
+        const assignments = taskData.assigned_to.map((userId) => ({
+          task_id: taskId,
+          user_id: userId,
+          assigned_by: data.created_by,
+        }))
+
+        const { error: assignmentError } = await supabase.from("task_assignments").insert(assignments)
+
+        if (assignmentError) {
+          console.error("Error updating task assignments:", assignmentError)
+        } else {
+          console.log("Task assignments updated successfully")
+        }
+      }
     }
 
     console.log("Task updated successfully:", data)

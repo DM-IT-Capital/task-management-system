@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { createTask, updateTask } from "@/lib/supabase"
 import { toast } from "sonner"
 
@@ -16,6 +17,7 @@ interface User {
   username: string
   full_name: string
   troop_rank: string
+  role?: string
 }
 
 interface Task {
@@ -26,6 +28,15 @@ interface Task {
   status: "pending" | "assigned" | "in_progress" | "on_hold" | "completed"
   due_date: string | null
   assigned_to: string | null
+  task_assignments?: Array<{
+    user_id: string
+    assigned_user: {
+      id: string
+      username: string
+      full_name: string
+      troop_rank: string
+    }
+  }>
 }
 
 interface TaskFormProps {
@@ -43,9 +54,13 @@ export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, edi
     priority: "medium",
     status: "pending",
     due_date: "",
-    assigned_to: "",
+    assigned_to: "unassigned",
   })
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Check if current user is admin
+  const isAdmin = currentUser.role === "admin"
 
   useEffect(() => {
     if (editingTask) {
@@ -55,8 +70,18 @@ export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, edi
         priority: editingTask.priority,
         status: editingTask.status,
         due_date: editingTask.due_date ? editingTask.due_date.split("T")[0] : "",
-        assigned_to: editingTask.assigned_to || "",
+        assigned_to: editingTask.assigned_to || "unassigned",
       })
+
+      // Set selected users for multi-assignment (admin only)
+      if (isAdmin && editingTask.task_assignments && editingTask.task_assignments.length > 0) {
+        const assignedUserIds = editingTask.task_assignments.map((assignment) => assignment.user_id)
+        setSelectedUsers(assignedUserIds)
+      } else if (editingTask.assigned_to) {
+        setSelectedUsers([editingTask.assigned_to])
+      } else {
+        setSelectedUsers([])
+      }
     } else {
       setFormData({
         title: "",
@@ -64,44 +89,102 @@ export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, edi
         priority: "medium",
         status: "pending",
         due_date: "",
-        assigned_to: "",
+        assigned_to: "unassigned",
       })
+      setSelectedUsers([])
     }
-  }, [editingTask])
+  }, [editingTask, isAdmin])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
+      let assignmentData: string | string[] | undefined
+
+      if (isAdmin) {
+        // Admin can assign to multiple users
+        assignmentData = selectedUsers.length > 0 ? selectedUsers : undefined
+      } else {
+        // Regular user can only assign to themselves
+        assignmentData = formData.assigned_to === "unassigned" ? undefined : formData.assigned_to
+      }
+
       const taskData = {
         title: formData.title,
         description: formData.description,
         priority: formData.priority,
         status: formData.status,
         due_date: formData.due_date || null,
-        assigned_to: formData.assigned_to || undefined,
+        assigned_to: assignmentData,
       }
+
+      console.log("Submitting task data:", taskData)
 
       if (editingTask) {
         await updateTask(editingTask.id, taskData)
         toast.success("Task updated successfully!")
         onTaskUpdated?.()
       } else {
-        await createTask({
+        const result = await createTask({
           ...taskData,
           created_by: currentUser.id,
         })
+        console.log("Task creation result:", result)
         toast.success("Task created successfully!")
         onTaskCreated()
       }
+
+      // Reset form after successful submission
+      if (!editingTask) {
+        setFormData({
+          title: "",
+          description: "",
+          priority: "medium",
+          status: "pending",
+          due_date: "",
+          assigned_to: "unassigned",
+        })
+        setSelectedUsers([])
+      }
     } catch (error) {
       console.error("Error saving task:", error)
-      toast.error(`Failed to ${editingTask ? "update" : "create"} task`)
+      toast.error(
+        `Failed to ${editingTask ? "update" : "create"} task: ${error instanceof Error ? error.message : "Unknown error"}`,
+      )
     } finally {
       setLoading(false)
     }
   }
+
+  const handleUserSelection = (userId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedUsers((prev) => [...prev, userId])
+    } else {
+      setSelectedUsers((prev) => prev.filter((id) => id !== userId))
+    }
+  }
+
+  // Get available users for assignment based on role
+  const getAssignmentOptions = () => {
+    if (isAdmin) {
+      // Admin can assign to anyone
+      return users.map((user) => ({
+        ...user,
+        displayName: user.id === currentUser.id ? `${user.full_name} (Me)` : `${user.full_name} (${user.troop_rank})`,
+      }))
+    } else {
+      // Regular users can only assign to themselves
+      return [
+        {
+          ...currentUser,
+          displayName: `${currentUser.full_name} (Me)`,
+        },
+      ]
+    }
+  }
+
+  const assignmentOptions = getAssignmentOptions()
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -171,23 +254,59 @@ export function TaskForm({ users, onTaskCreated, onTaskUpdated, currentUser, edi
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="assigned_to">Assign To</Label>
-        <Select
-          value={formData.assigned_to}
-          onValueChange={(value) => setFormData({ ...formData, assigned_to: value })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select user (optional)" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {users.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.full_name} ({user.troop_rank})
-              </SelectItem>
+        <Label htmlFor="assigned_to">
+          Assign To {isAdmin ? "(Select multiple users)" : "(You can only assign to yourself)"}
+        </Label>
+
+        {isAdmin ? (
+          // Multi-select for admin users
+          <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="unassigned"
+                checked={selectedUsers.length === 0}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedUsers([])
+                  }
+                }}
+              />
+              <Label htmlFor="unassigned" className="text-sm font-normal">
+                Unassigned
+              </Label>
+            </div>
+            {assignmentOptions.map((user) => (
+              <div key={user.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={user.id}
+                  checked={selectedUsers.includes(user.id)}
+                  onCheckedChange={(checked) => handleUserSelection(user.id, checked as boolean)}
+                />
+                <Label htmlFor={user.id} className="text-sm font-normal">
+                  {user.displayName}
+                </Label>
+              </div>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+        ) : (
+          // Single select for regular users
+          <Select
+            value={formData.assigned_to}
+            onValueChange={(value) => setFormData({ ...formData, assigned_to: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select user (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {assignmentOptions.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="flex justify-end gap-2">
